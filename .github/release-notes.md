@@ -1,11 +1,9 @@
-## Vector 0.3.0
+## Vector 0.3.1
 
-- English / Русский / Auto selector in the side-panel header.
-- Automatic language detection from War Thunder, Steam, then Windows, with English fallback.
-- Localized map controls, Results, Activity, session overview, country tooltips and Windows tray menu.
-- Dates, numbers and Russian plural forms follow the selected language. Player names and game messages remain unchanged.
-- Language changes apply without resetting the map or current Activity observations. Manual preferences survive restarts and app updates.
-- Both languages are included offline in the single executable and standalone HTML. Game/Steam detection requires Vector.exe; the standalone HTML uses browser language.
+- Compact Russian stat headers: **Уничт.**, **Потери**, **Возр.**, with full names available on hover and to screen readers.
+- Shorter kill-ratio headings in Results and the session overview, without reducing text size.
+- More room for numeric columns and contained text wrapping so labels do not overlap adjacent columns.
+- English labels, full labels elsewhere, battle data and calculations remain unchanged.
 
 Existing automatic app updates, history collection and battle-data safeguards remain unchanged.
 

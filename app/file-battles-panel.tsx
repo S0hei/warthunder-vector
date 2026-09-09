@@ -7,6 +7,7 @@ import type { BattlePeriod, FileBattle } from './lib/file-battles';
 import type { FileArchive } from './use-file-archive';
 import AircraftNames from './aircraft-name';
 import RewardLabel from './reward-label';
+import BattleStatLabel from './battle-stat-label';
 import { GameLabel } from './game-icon';
 import { mapName } from './lib/map-names';
 import { battleOutcomeText } from './lib/ui-text';
@@ -63,8 +64,8 @@ export default function FileBattlesPanel({ archive, account, accounts, onAccount
       <p><span className="positive">{t('{count} won', { count: number(totals.wins) })}</span><span className="negative">{t('{count} lost', { count: number(totals.losses) })}</span><span>{t('{count} without a result', { count: number(totals.unresolved) })}</span></p>
     </div>
     <dl className="results-totals results-ratios">
-      <div><dt><GameLabel icon="killDeath">{t("Kills / deaths")}</GameLabel></dt><dd>{totals.deaths === 0 && totals.kills > 0 ? '∞' : number(totals.kd, 2)}</dd><small>{countLabel(totals.kills, 'kill')} · {countLabel(totals.deaths, 'death')}</small><small>{t('Stats from {known}/{total} battles', { known: totals.scoreCount, total: totals.count })}</small></div>
-      <div><dt><GameLabel icon="killSpawn">{t("Kills / spawns")}</GameLabel></dt><dd>{number(totals.ks, 2)}</dd><small>{countLabel(totals.spawnKills, 'kill')} · {countLabel(totals.spawns, 'spawn')}</small><small>{t('Airfield repairs included · {known}/{total} battles', { known: totals.spawnCount, total: totals.count })}</small></div>
+      <div><dt><BattleStatLabel kind="killDeath" /></dt><dd>{totals.deaths === 0 && totals.kills > 0 ? '∞' : number(totals.kd, 2)}</dd><small>{countLabel(totals.kills, 'kill')} · {countLabel(totals.deaths, 'death')}</small><small>{t('Stats from {known}/{total} battles', { known: totals.scoreCount, total: totals.count })}</small></div>
+      <div><dt><BattleStatLabel kind="killSpawn" /></dt><dd>{number(totals.ks, 2)}</dd><small>{countLabel(totals.spawnKills, 'kill')} · {countLabel(totals.spawns, 'spawn')}</small><small>{t('Airfield repairs included · {known}/{total} battles', { known: totals.spawnCount, total: totals.count })}</small></div>
     </dl>
     <dl className="results-rewards">
       <div><dt><RewardLabel kind="wp" /></dt><dd>{number(totals.wp)}</dd><small>{t('{battles} confirmed', { battles: countLabel(totals.wpCount, 'battle') })}</small></div>
@@ -72,7 +73,7 @@ export default function FileBattlesPanel({ archive, account, accounts, onAccount
     </dl>
     <div className="results-table-wrap" role="region" tabIndex={0} aria-label={t("Saved battle history")}>
       <table className="results-table"><caption className="activity-sr-only">{t("Saved battles, newest first. Only confirmed results count toward win rate and reward totals. AI kills are counted separately.")}</caption>
-        <thead><tr><th scope="col">{t("Battle")}</th><th scope="col"><GameLabel icon="kills">{t("Kills")}</GameLabel></th><th scope="col"><GameLabel icon="deaths">{t("Deaths")}</GameLabel></th><th scope="col"><GameLabel icon="spawns">{t("Spawns")}</GameLabel></th></tr></thead>
+        <thead><tr><th scope="col">{t("Battle")}</th><th scope="col"><BattleStatLabel kind="kills" /></th><th scope="col"><BattleStatLabel kind="deaths" /></th><th scope="col"><BattleStatLabel kind="spawns" /></th></tr></thead>
         <tbody>{battles.length === 0 && <tr><td colSpan={4} className="results-empty">{period.error ? t("Choose a valid period") : archive.status === 'indexing' ? t("Loading battle history") : t("No battles in this period")}</td></tr>}
           {battles.slice(currentPage * 20, currentPage * 20 + 20).map(b => <FileBattleRow key={battleKey(b)} battle={b} expanded={expanded === battleKey(b)} toggle={() => setExpanded(expanded === battleKey(b) ? null : battleKey(b))} />)}
         </tbody>
@@ -96,8 +97,8 @@ function FileBattleRow({ battle: b, expanded, toggle }: { battle: FileBattle; ex
   </tr><tr id={`battle-${battleKey(b)}`} hidden={!expanded}><td colSpan={4}><div className="report-details">
     {(provisional || provisionalRewards) && <p className="results-message">{provisional ? t("No confirmed result for this battle. ") : ''}{provisionalRewards ? t("These rewards were recorded when you left. They are not final and do not count toward totals.") : ''}</p>}
     <dl><div><dt>{t("Map")}</dt><dd>{mapName(b.mission, t('Map unavailable'))}</dd></div>
-      <div><dt><GameLabel icon="killDeath">{t("Kills / deaths")}</GameLabel></dt><dd>{killCount(b) === null || b.deaths === null ? notAvailable : b.deaths ? number(killCount(b)! / b.deaths, 2) : killCount(b)! > 0 ? '∞' : notAvailable}</dd></div>
-      <div><dt><GameLabel icon="killSpawn">{t("Kills / spawns")}</GameLabel></dt><dd>{killCount(b) === null || !b.spawns ? notAvailable : number(killCount(b)! / b.spawns, 2)}</dd></div>
+      <div><dt><BattleStatLabel kind="killDeath" /></dt><dd>{killCount(b) === null || b.deaths === null ? notAvailable : b.deaths ? number(killCount(b)! / b.deaths, 2) : killCount(b)! > 0 ? '∞' : notAvailable}</dd></div>
+      <div><dt><BattleStatLabel kind="killSpawn" /></dt><dd>{killCount(b) === null || !b.spawns ? notAvailable : number(killCount(b)! / b.spawns, 2)}</dd></div>
       <div><dt><RewardLabel kind="wp" /></dt><dd className={b.rewardsFinal ? '' : 'file-provisional'}>{number(b.wp)}{provisionalRewards && b.wp !== null ? t(" · not final") : ''}</dd></div>
       <div><dt><RewardLabel kind="exp" /></dt><dd className={b.rewardsFinal ? '' : 'file-provisional'}>{number(b.exp)}{provisionalRewards && b.exp !== null ? t(" · not final") : ''}</dd></div>
       <div><dt>{t("Air / ground / sea kills")}</dt><dd>{number(b.kills)} / {number(b.groundKills)} / {number(b.navalKills)}</dd></div>

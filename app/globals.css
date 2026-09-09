@@ -568,7 +568,7 @@ button:focus-visible { outline: 1px solid var(--signal); outline-offset: 0.125re
 .results-win-summary strong { color: var(--cream); font-size: 2rem; font-weight: 550; letter-spacing: -.04em; }
 .results-win-summary p { display: grid; gap: .35rem; margin: 0; text-align: right; color: var(--activity-muted); font-size: .875rem; }
 .results-ratios { gap: .625rem; border: 0; }
-.results-ratios > div { border: 1px solid var(--line); border-radius: .5rem; padding: .875rem; background: var(--panel-raised); }
+.results-ratios > div { min-width: 0; border: 1px solid var(--line); border-radius: .5rem; padding: .875rem; background: var(--panel-raised); }
 .results-ratios dt { font: 500 .875rem/1.4 var(--font-geist-sans), sans-serif; letter-spacing: 0; color: var(--activity-ink); }
 .results-ratios dd { color: var(--cream); font-size: 2rem; margin: .5rem 0; }
 .results-ratios small { font: 400 .75rem/1.5 var(--font-geist-sans), sans-serif; }
@@ -578,7 +578,7 @@ button:focus-visible { outline: 1px solid var(--signal); outline-offset: 0.125re
 .results-rewards small { color: var(--activity-muted); font-size: .75rem; }
 .results-table-wrap { border-radius: .5rem; }
 .results-table { min-width: 0; table-layout: fixed; font-size: .875rem; }
-.results-table th:first-child { width: 46%; }
+.results-table th:first-child { width: 40%; }
 .results-table thead th { padding: .75rem .25rem; background: var(--panel-raised); font-size: .875rem; }
 .results-table thead th:first-child { padding-left: .75rem; }
 .results-table td, .results-table td:last-child { text-align: center; padding: .75rem .25rem; vertical-align: middle; }
@@ -750,6 +750,11 @@ button:focus-visible { outline: 1px solid var(--signal); outline-offset: 0.125re
 .session-metrics .game-icon[data-game-icon='killSpawn'], .results-ratios .game-icon[data-game-icon='killSpawn'] { color: #a7becf; }
 .session-rewards .game-icon[data-game-icon='silverLions'], .results-rewards .game-icon[data-game-icon='silverLions'] { width: 2em; height: 2em; }
 .activity-table thead .game-label, .results-table thead .game-label { flex-direction: column; gap: .35em; }
+/* Keep localized stat headings inside their columns at every text scale. */
+.battle-stat-label { min-width: 0; }
+.battle-stat-label .game-label-text { max-width: 100%; white-space: normal; overflow-wrap: anywhere; line-height: 1.35; }
+.results-table thead .battle-stat-label, .session-table thead .battle-stat-label { display: flex; flex-direction: column; gap: .35em; text-align: center; }
+.session-table thead th:has(.battle-stat-label) { text-align: center; white-space: normal; }
 .combat-action .game-icon { width: 1.4em; height: 1.4em; }
 .intel-tabs .game-icon { width: 1.2em; height: 1.2em; }
 @container (max-width: 42rem) {

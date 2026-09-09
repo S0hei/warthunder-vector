@@ -10,6 +10,6 @@ export function GameIcon({ name }: { name: GameIconName }) {
       : { maskImage: `url("${asset.src}")`, WebkitMaskImage: `url("${asset.src}")` }} />;
 }
 
-export function GameLabel({ icon, children, title }: { icon: GameIconName; children: ReactNode; title?: string }) {
-  return <span className="game-label" title={title}><GameIcon name={icon} /><span className="game-label-text">{children}</span></span>;
+export function GameLabel({ icon, children, title, className }: { icon: GameIconName; children: ReactNode; title?: string; className?: string }) {
+  return <span className={`game-label${className ? ` ${className}` : ''}`} title={title}><GameIcon name={icon} /><span className="game-label-text">{children}</span></span>;
 }

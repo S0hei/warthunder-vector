@@ -7,6 +7,7 @@ import { sessionBattles } from './lib/session-overview';
 import type { FileArchive } from './use-file-archive';
 import AircraftNames from './aircraft-name';
 import RewardLabel from './reward-label';
+import BattleStatLabel from './battle-stat-label';
 import { GameLabel } from './game-icon';
 import { mapName } from './lib/map-names';
 import { battleOutcomeText } from './lib/ui-text';
@@ -46,9 +47,9 @@ export default function SessionOverview({ archive, account, accounts, onAccountC
         <div className="session-outcomes"><span className="positive">{t('{count} won', { count: display(totals.wins) })}</span><span className="negative">{t('{count} lost', { count: display(totals.losses) })}</span><span>{t('{count} without a result', { count: display(totals.unresolved) })}</span></div>
         {totals.count > 0 && <div className="session-outcome-bar" aria-hidden="true"><i className="win" style={{ flexGrow: totals.wins }} /><i className="loss" style={{ flexGrow: totals.losses }} /><i className="unknown" style={{ flexGrow: totals.unresolved }} /></div>}
       </div>
-      <div><dt><GameLabel icon="killDeath">{t("Kills / deaths")}</GameLabel></dt><dd>{totals.kills > 0 && totals.deaths === 0 ? '∞' : number(totals.kd, 2)}</dd>
+      <div><dt><BattleStatLabel kind="killDeath" /></dt><dd>{totals.kills > 0 && totals.deaths === 0 ? '∞' : number(totals.kd, 2)}</dd>
         <p>{countLabel(archive.startedAt === null ? null : totals.kills, 'kill')} <span>/</span> {countLabel(archive.startedAt === null ? null : totals.deaths, 'death')}</p><small>{t('Stats from {known}/{total} battles', { known: totals.scoreCount, total: totals.count })}</small></div>
-      <div><dt><GameLabel icon="killSpawn">{t("Kills / spawns")}</GameLabel></dt><dd>{number(totals.ks, 2)}</dd>
+      <div><dt><BattleStatLabel kind="killSpawn" /></dt><dd>{number(totals.ks, 2)}</dd>
         <p>{countLabel(archive.startedAt === null ? null : totals.spawnKills, 'kill')} <span>/</span> {countLabel(archive.startedAt === null ? null : totals.spawns, 'spawn')}</p><small>{t('Airfield repairs included · {known}/{total} battles', { known: totals.spawnCount, total: totals.count })}</small></div>
     </dl>
 
@@ -64,7 +65,7 @@ export default function SessionOverview({ archive, account, accounts, onAccountC
         {unavailable && archive.connection !== 'connecting' && <p>{t("Open or restart Vector.exe to load your results.")}</p>}</div>
         : <div className="session-table-wrap" role="region" aria-label={t("Recent session battles")} tabIndex={0}>
           <table className="session-table"><caption className="activity-sr-only">{t("The six most recent battles since Vector started. Only confirmed results count toward win rate and reward totals.")}</caption>
-            <thead><tr><th scope="col">{t("Battle")}</th><th scope="col">{t("Result")}</th><th scope="col"><GameLabel icon="kills">{t("Kills")}</GameLabel></th><th scope="col"><GameLabel icon="deaths">{t("Deaths")}</GameLabel></th><th scope="col"><GameLabel icon="spawns">{t("Spawns")}</GameLabel></th><th scope="col"><RewardLabel kind="wp" short /></th><th scope="col"><RewardLabel kind="exp" /></th></tr></thead>
+            <thead><tr><th scope="col">{t("Battle")}</th><th scope="col">{t("Result")}</th><th scope="col"><BattleStatLabel kind="kills" /></th><th scope="col"><BattleStatLabel kind="deaths" /></th><th scope="col"><BattleStatLabel kind="spawns" /></th><th scope="col"><RewardLabel kind="wp" short /></th><th scope="col"><RewardLabel kind="exp" /></th></tr></thead>
             <tbody>{battles.slice(0, 6).map(b => <tr key={battleKey(b)}>
               <th scope="row"><strong>{b.vehicles.length ? <AircraftNames vehicles={b.vehicles} /> : mapName(b.mission, t('Battle'))}</strong><span><time dateTime={b.playedAt}>{new Date(b.playedAt).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', hour12: false })}</time> · {mapName(b.mission, t('Map unavailable'))}</span></th>
               <td><span className={`session-result ${b.outcome}`}>{t(battleOutcomeText(b))}</span></td>

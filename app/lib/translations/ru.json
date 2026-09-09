@@ -344,5 +344,10 @@
   "Wheeled": "Колёсная техника",
   "Armoured": "Бронетехника",
   "Cargo Ship": "Грузовое судно",
-  "Vector | War Thunder companion": "Vector | Помощник для War Thunder"
+  "Vector | War Thunder companion": "Vector | Помощник для War Thunder",
+  "Kills (compact)": "Уничт.",
+  "Deaths (compact)": "Потери",
+  "Spawns (compact)": "Возр.",
+  "Kills / deaths (compact)": "Уничт. / потери",
+  "Kills / spawns (compact)": "Уничт. / возр."
 }
