@@ -53,7 +53,8 @@ test('app-authored UI, metadata and tray text contain no long dashes', () => {
 // Render real components with React on the server; no browser or game interaction.
 function ui(file, extra = '') {
   const imported = { './lib/ui-text': copy, './lib/file-battles': battles, './lib/session-overview': session, './lib/aircraft': aircraft, './lib/map-names': maps,
-    './lib/combat-activity': combat, './lib/activity-search': activitySearch, './game-icon': gameIcons, './lib/vector-bridge': { vectorEndpoint: () => null } };
+    './lib/combat-activity': combat, './lib/activity-search': activitySearch, './game-icon': gameIcons, './lib/vector-bridge': { vectorEndpoint: () => null },
+    './language-provider': componentLoader()('language-provider.tsx') };
   const source = readFileSync(new URL(`../app/${file}.tsx`, import.meta.url), 'utf8');
   const { outputText } = ts.transpileModule(source + extra, { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } });
   const exports = {};

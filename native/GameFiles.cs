@@ -402,9 +402,11 @@ namespace VectorPortable
         private readonly object gate = new object();
         private readonly Timer timer;
         private readonly CombatTeamFeed teams;
-        private string root;
+        private volatile string root;
         private int busy;
         private volatile bool paused, stopped;
+
+        public string GameFolder { get { return root; } }
 
         public static bool IsGameFolder(string path)
         { return !string.IsNullOrWhiteSpace(path) && Directory.Exists(Path.Combine(path, ".game_logs")) && Directory.Exists(Path.Combine(path, "Replays")) && (File.Exists(Path.Combine(path, "win64", "aces.exe")) || File.Exists(Path.Combine(path, "win32", "aces.exe"))); }

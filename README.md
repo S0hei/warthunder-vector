@@ -20,6 +20,14 @@ Updates replace only the executable, preserving **Vector-data** and your saved b
 
 Older builds without this updater need one manual replacement with the latest Vector.exe. Close Vector using its tray menu first. The app is unsigned, so Windows may show a reputation warning. Vector is an unofficial companion, not a Gaijin product or a claim of Gaijin approval.
 
+## Language
+
+Choose **Auto**, **English** or **Русский** from the language selector at the top of the side panel. Changes apply immediately without resetting the map, filters or Activity observations. The Windows tray menu follows the same saved choice.
+
+Auto uses the first supported language from War Thunder's configuration, its Steam installation settings, the Steam client, then the Windows interface language. If none is available, it uses English. Settings are rechecked once a minute; choosing a language manually overrides detection and is remembered across launches and app updates.
+
+Interface labels, country tooltips, dates and numbers are localized. Player names, game-supplied messages and aircraft/map designations are preserved. Standalone HTML uses the browser language and stores your choice in that browser; game/Steam detection and shared tray settings require Vector.exe. See [language behavior and privacy](docs/languages.md).
+
 ## Display scaling
 
 Text, controls, spacing and panels scale automatically with the browser's usable width and height, including 1440p and 4K screens. Smaller labels now have a readable baseline instead of the previous 6–9px sizes. The map retains its own fit/zoom controls and precise pointer coordinates.

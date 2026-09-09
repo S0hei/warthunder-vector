@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 
-export function componentLoader(overrides = {}) {
+export function componentLoader(overrides = {}, globals = {}) {
   const cache = new Map(), require = createRequire(import.meta.url);
   function load(file) {
     const path = fileURLToPath(new URL(`../app/${file}`, import.meta.url));
@@ -21,7 +21,7 @@ export function componentLoader(overrides = {}) {
     const { outputText } = ts.transpileModule(source, { compilerOptions: {
       target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true,
     } });
-    runInNewContext(outputText, { exports, require: id => {
+    runInNewContext(outputText, { ...globals, exports, require: id => {
       if (id in overrides) return overrides[id];
       if (!id.startsWith('.')) return require(id);
       const base = resolve(dirname(path), id);

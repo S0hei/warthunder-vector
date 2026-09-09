@@ -122,6 +122,7 @@ function pickerHarness(initial) {
   const hookedReact = { ...React,
     useState(value) { const i = cursor++; if (!(i in state)) state[i] = typeof value === 'function' ? value() : value; return [state[i], v => { state[i] = typeof v === 'function' ? v(state[i]) : v; }]; },
     useRef: () => ({ current: null }), useEffect() {}, useMemo: fn => fn(), useId: () => 'picker-test',
+    useContext: () => ({ language: 'en' }), useCallback: fn => fn,
   };
   const Component = componentLoader({ react: hookedReact })('activity-player-picker.tsx').default;
   function render() { cursor = 0; return Component({ ...props, onChange: (search, selectedName) => { props = { ...props, search, selectedName }; } }); }

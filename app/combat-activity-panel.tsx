@@ -1,10 +1,10 @@
 'use client';
+import { useTranslation } from './language-provider';
 
 import { useEffect, useMemo, useState } from 'react';
 import { CombatActivityTracker, emptyCombatActivity } from './lib/combat-activity';
 import type { CombatAction, CombatActivity, CombatParty } from './lib/combat-activity';
 import { vectorEndpoint } from './lib/vector-bridge';
-import { countLabel } from './lib/ui-text';
 import { activityEventMatches } from './lib/activity-search';
 import ActivityPlayerPicker from './activity-player-picker';
 import EnemyParticipants from './enemy-participants';
@@ -71,6 +71,7 @@ export default function CombatActivityPanel({ activity }: { activity: CombatActi
 }
 
 function ActivityFlightPanel({ activity }: { activity: CombatActivity }) {
+  const { t, locale, countLabel } = useTranslation();
   const [search, setSearch] = useState(''), [selectedName, setSelectedName] = useState<string | null>(null);
   const [view, setView] = useState<'events' | 'participants'>('events');
   const query = search.trim().toLocaleLowerCase();
@@ -87,33 +88,33 @@ function ActivityFlightPanel({ activity }: { activity: CombatActivity }) {
       ? 'Waiting for a battle' : 'No combat events yet';
 
   return (
-    <section className="combat-activity" aria-label="Combat activity">
+    <section className="combat-activity" aria-label={t("Combat activity")}>
       <header className="activity-heading">
-        <span className={`activity-status ${activity.status}`}><i />{status}</span>
+        <span className={`activity-status ${activity.status}`}><i />{t(status)}</span>
         <span>{countLabel(activity.eventCount, 'event')}</span>
       </header>
       <div className="activity-scope">
-        <span>{started ? <>Since <time dateTime={started.toISOString()}>{started.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}</time></> : 'Combat activity'}</span>
-        {view === 'events' && <span className="activity-team-key"><i className="combat-ally" />Allies <i className="combat-enemy" />Enemies</span>}
+        <span>{started ? <>{t('Since')}{' '}<time dateTime={started.toISOString()}>{started.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', hour12: false })}</time></> : t("Combat activity")}</span>
+        {view === 'events' && <span className="activity-team-key"><i className="combat-ally" />{t("Allies")}{' '}<i className="combat-enemy" />{t("Enemies")}</span>}
       </div>
-      <div className="activity-view" role="group" aria-label="Activity view">
-        <button type="button" aria-pressed={view === 'events'} onClick={() => setView('events')}><GameLabel icon="activity">Events</GameLabel></button>
+      <div className="activity-view" role="group" aria-label={t("Activity view")}>
+        <button type="button" aria-pressed={view === 'events'} onClick={() => setView('events')}><GameLabel icon="activity">{t("Events")}</GameLabel></button>
         <button type="button" aria-pressed={view === 'participants'} onClick={() => {
           if (selectedName && !enemies.some(p => p.name === selectedName)) { setSearch(''); setSelectedName(null); }
           setView('participants');
-        }}><GameLabel icon="participants">Participants</GameLabel></button>
+        }}><GameLabel icon="participants">{t("Participants")}</GameLabel></button>
       </div>
       <ActivityPlayerPicker participants={view === 'participants' ? enemies : activity.participants} status={activity.status} search={search} selectedName={selectedName} compact={view === 'participants'}
         onChange={(query, name) => { setSearch(query); setSelectedName(name); }} />
-      {view === 'events' ? <div className="activity-feed" role="region" aria-label="Recent combat events" tabIndex={0}>
-        {events.length === 0 && <p className="activity-empty-message">{query ? 'No matching events' : empty}</p>}
+      {view === 'events' ? <div className="activity-feed" role="region" aria-label={t("Recent combat events")} tabIndex={0}>
+        {events.length === 0 && <p className="activity-empty-message">{query ? t("No matching events") : t(empty)}</p>}
         <ol>{events.map(event => <li key={event.key} className={`combat-event ${event.action}`}>
-          <header><span className="combat-action"><GameLabel icon={actionIcons[event.action]}>{actionLabels[event.action]}</GameLabel></span>
-            {event.explicitlyAi && <span className="combat-ai-label">AI target</span>}
-            <time aria-label={`${countLabel(Math.floor(event.time), 'second')} into the battle`}>{eventTime(event.time)}</time>
+          <header><span className="combat-action"><GameLabel icon={actionIcons[event.action]}>{t(actionLabels[event.action])}</GameLabel></span>
+            {event.explicitlyAi && <span className="combat-ai-label">{t("AI target")}</span>}
+            <time aria-label={t('{seconds} into the battle', { seconds: countLabel(Math.floor(event.time), 'second') })}>{eventTime(event.time)}</time>
           </header>
           <div className="combat-parties"><Party party={event.actor} />
-            {event.target && <><span className="combat-arrow" aria-label="target">→</span><Party party={event.target} /></>}
+            {event.target && <><span className="combat-arrow" aria-label={t("target")}>→</span><Party party={event.target} /></>}
           </div>
         </li>)}</ol>
       </div> : <EnemyParticipants participants={enemies} status={activity.status} search={search} selectedName={selectedName} />}
@@ -122,9 +123,10 @@ function ActivityFlightPanel({ activity }: { activity: CombatActivity }) {
 }
 
 function Party({ party }: { party: CombatParty }) {
+  const { t } = useTranslation();
   const team = { ally: 'Ally', enemy: 'Enemy', self: 'You', unknown: 'Team unknown' }[party.team];
-  return <span className={`combat-party combat-${party.team}`} title={team}>
-    <span className="activity-sr-only">{team}: </span>
+  return <span className={`combat-party combat-${party.team}`} title={t(team)}>
+    <span className="activity-sr-only">{t(team)}: </span>
     {party.name && <b>{party.name}</b>}
     <span className={party.name ? 'combat-vehicle' : 'combat-unit'}>{party.vehicle}</span>
   </span>;

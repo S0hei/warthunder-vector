@@ -99,6 +99,7 @@ internal static class VectorTests
                 Check(status == 200 && teams.Contains("\"events\":[]"), "allowlisted combat annotations have a protected route");
             }
             GameFileTests.Run(Check, directory);
+            LanguageTests.Run(Check, directory);
             UpdateTests.Run(Check, directory);
             Console.WriteLine(checks + " Windows checks passed.");
             return 0;

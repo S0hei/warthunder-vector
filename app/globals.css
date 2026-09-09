@@ -296,6 +296,9 @@ button:focus-visible { outline: 1px solid var(--signal); outline-offset: 0.125re
 
 .intel-panel { z-index: 20; display: flex; flex-direction: column; min-width: 0; padding: 1.5625rem 1.5rem 1.1875rem; border-left: 1px solid var(--line); background: var(--panel); overflow: auto; scrollbar-width: thin; scrollbar-color: #3d453d transparent; }
 .panel-heading { display: flex; align-items: center; justify-content: space-between; }
+.language-control { margin-left: auto; margin-right: .75em; min-width: 0; position: relative; }
+.language-control select { max-width: 10em; padding: .3em .4em; font: inherit; font-size: .92em; color: var(--cream); background: var(--panel); border: 1px solid var(--line); border-radius: 0; }
+.language-error { position: absolute; right: 0; top: 100%; z-index: 10; min-width: 14em; padding: .5em; color: var(--hostile); background: var(--panel); font-size: .9em; }
 .intel-panel h2 { margin: 0.75rem 0 1.125rem; font: 520 2rem/1 var(--font-geist-sans), sans-serif; letter-spacing: -.055em; }
 .intel-tabs { display: flex; flex-shrink: 0; gap: 0.25rem; margin-bottom: 1.125rem; border-bottom: 1px solid var(--line); }
 .intel-tabs button { display: flex; align-items: center; gap: 0.3125rem; min-height: 2.125rem; padding: 0.5rem; border: 0; border-bottom: 0.125rem solid transparent; background: transparent; color: var(--muted); font: 600 0.75rem/1 var(--font-geist-mono), monospace; letter-spacing: .05em; cursor: pointer; }

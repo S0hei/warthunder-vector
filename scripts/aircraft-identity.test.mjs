@@ -9,6 +9,7 @@ import ts from 'typescript';
 import { resolveAircraft } from '../app/lib/aircraft.ts';
 import catalog from '../app/lib/aircraft-catalog.json' with { type: 'json' };
 import { englishEntries, displayName, compileAircraft, compactFlag } from './aircraft-catalog.mjs';
+import { componentLoader } from './component-test-loader.mjs';
 
 test('archived aircraft IDs resolve to game display names with country flags', () => {
   const examples = {
@@ -90,7 +91,7 @@ function component(file, imports = {}) {
 }
 
 test('aircraft rendering pairs each plane with its own flag and escapes unknown text', () => {
-  const AircraftNames = component('aircraft-name.tsx', { './lib/aircraft': { resolveAircraft } });
+  const AircraftNames = component('aircraft-name.tsx', { './lib/aircraft': { resolveAircraft }, './language-provider': componentLoader()('language-provider.tsx') });
   const html = renderToStaticMarkup(createElement(AircraftNames, { vehicles: ['g_55s', 'spitfire_fr_mk14e_belgium', 'g_55s'] }));
   assert.equal((html.match(/class="aircraft-identity"/g) ?? []).length, 2);
   assert.match(html, /alt="Kingdom of Italy"/); assert.match(html, /alt="Belgium"/);

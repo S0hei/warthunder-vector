@@ -102,7 +102,7 @@ function harness(battles) {
         if (typeof state[i] === 'string' && /^\d{4}-.*Z$/.test(state[i])) { clockIndex = i; state[i] = local('2026-09-09'); }
       }
       return [state[i], value => { state[i] = typeof value === 'function' ? value(state[i]) : value; }];
-    }, useEffect() {}, useMemo: fn => fn(),
+    }, useEffect() {}, useMemo: fn => fn(), useContext: () => ({ language: 'en' }), useCallback: fn => fn,
   };
   const Panel = componentLoader({ react: hookedReact })('file-battles-panel.tsx').default;
   function render() { cursor = 0; return Panel({ ...props, onAccountChange: account => { props = { ...props, account }; } }); }

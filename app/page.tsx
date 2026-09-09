@@ -6,6 +6,7 @@ import FileBattlesPanel from './file-battles-panel';
 import SessionOverview from './session-overview';
 import { useFileArchive } from './use-file-archive';
 import { useAppUpdates } from './use-app-updates';
+import { LanguageProvider, LanguageSelector, useTranslation } from './language-provider';
 import { showSessionOverview } from './lib/session-overview';
 import AircraftSymbol from './aircraft-symbol';
 import { notAvailable } from './lib/ui-text';
@@ -126,11 +127,11 @@ function actorKind(object: MapObject): 'air' | 'ground' | 'objective' {
   return 'objective';
 }
 
-function actorLabel(object: MapObject) {
+function actorLabel(object: MapObject, t: (text: string) => string) {
   const kind = actorKind(object);
-  if (kind === 'air') return isSquadmate(object) ? 'Squadron aircraft' : 'Aircraft';
-  if (kind === 'ground') return 'Ground';
-  return 'Objective';
+  if (kind === 'air') return t(isSquadmate(object) ? 'Squadron aircraft' : 'Aircraft');
+  if (kind === 'ground') return t('Ground');
+  return t('Objective');
 }
 
 function isSpawnPoint(object: MapObject) {
@@ -145,8 +146,8 @@ function groupFor(object: MapObject): keyof Filters {
   return 'objectives';
 }
 
-function objectLabel(object: MapObject) {
-  if (isPlayer(object)) return 'Your aircraft';
+function objectLabel(object: MapObject, t: (text: string) => string) {
+  if (isPlayer(object)) return t('Your aircraft');
   const labels: Record<string, string> = {
     aircraft: aircraftRoleLabel(aircraftRole(object)),
     ground_model: object.icon ? titleCase(object.icon) : 'Ground contact',
@@ -157,7 +158,7 @@ function objectLabel(object: MapObject) {
     respawn_base_fighter: 'Fighter spawn',
     capture_zone: 'Capture zone',
   };
-  return labels[object.type] ?? titleCase(object.type);
+  return t(labels[object.type] ?? titleCase(object.type));
 }
 
 function markerGlyph(object: MapObject) {
@@ -446,6 +447,7 @@ function TrailCanvas({ trail }: { trail: Point[] }) {
 }
 
 function Runway({ object }: { object: MapObject }) {
+  const { t } = useTranslation();
   if (object.sx == null || object.sy == null || object.ex == null || object.ey == null) return null;
   const length = Math.hypot(object.ex - object.sx, object.ey - object.sy) * 100;
   const angle = Math.atan2(object.ey - object.sy, object.ex - object.sx) * 180 / Math.PI;
@@ -459,12 +461,17 @@ function Runway({ object }: { object: MapObject }) {
         width: `${length}%`,
         transform: `translate(-50%, -50%) rotate(${angle}deg)`,
       }}
-      title={`${team === 'neutral' ? '' : `${titleCase(team)} `}${objectLabel(object)}`}
+      title={`${team === 'neutral' ? '' : `${t(titleCase(team))} `}${objectLabel(object, t)}`}
     />
   );
 }
 
 export default function Home() {
+  return <LanguageProvider><VectorApp /></LanguageProvider>;
+}
+
+function VectorApp() {
+  const { t, number, notAvailable: unavailable } = useTranslation();
   useAppUpdates();
   const { objects, mapInfo, mapInfoUpdatedAt, lastUpdate, everConnected, trail, mission, teamMessages } = useWarThunderFeed();
   const activity = useCombatActivity(readJson);
@@ -686,16 +693,16 @@ export default function Home() {
 
   return (
     <main className={`tactical-shell ${highContrast ? 'high-contrast' : ''} ${overview ? 'session-mode' : ''}`}>
-      <aside className="brand-rail" aria-label="Vector controls">
-        <div className="brand-mark" aria-label="Vector tactical map">V</div>
-        {!overview && <button className="rail-button" aria-label="Toggle map contrast" title="Toggle map contrast" onClick={() => setHighContrast((active) => !active)}>◐</button>}
-        <button className="rail-button" aria-label="Open full screen" title="Full screen (F)" onClick={() => void document.documentElement.requestFullscreen?.()}>⛶</button>
+      <aside className="brand-rail" aria-label={t("Vector controls")}>
+        <div className="brand-mark" aria-label={t("Vector tactical map")}>V</div>
+        {!overview && <button className="rail-button" aria-label={t("Toggle map contrast")} title={t("Toggle map contrast")} onClick={() => setHighContrast((active) => !active)}>◐</button>}
+        <button className="rail-button" aria-label={t("Open full screen")} title={t("Full screen (F)")} onClick={() => void document.documentElement.requestFullscreen?.()}>⛶</button>
       </aside>
 
       <section
         ref={stageRef}
         className={`map-stage ${overview ? 'overview-stage' : ''} ${!overview && isDragging ? 'dragging' : ''}`}
-        aria-label={overview ? 'Session results' : 'Live battle map'}
+        aria-label={overview ? t("Session results") : t("Live battle map")}
         onPointerDown={overview ? undefined : onPointerDown}
         onPointerMove={overview ? undefined : onPointerMove}
         onPointerUp={overview ? undefined : onPointerUp}
@@ -713,7 +720,7 @@ export default function Home() {
         <div className="map-ambient" style={{ backgroundImage: `url(${mapImage})` }} />
         <div className="map-pan-layer" style={{ transform: `translate3d(${pan.x}px, ${pan.y}px, 0)` }}>
           <div className="map-content" style={{ transform: `translate(-50%, -50%) scale(${zoom})` }}>
-            <img className="map-image" src={mapImage} alt="War Thunder tactical map" draggable="false" />
+            <img className="map-image" src={mapImage} alt={t("War Thunder tactical map")} draggable="false" />
             <div className="map-tint" />
             <div className="grid-overlay" />
             <TrailCanvas trail={trail} />
@@ -730,7 +737,7 @@ export default function Home() {
               const kind = actorKind(object);
               const rotation = object.type === 'aircraft' ? headingFromObject(object) : 0;
               const gameTarget = isGameSelectedTarget(object, connected);
-              const label = `${team && team !== 'neutral' ? `${titleCase(team)} ` : ''}${objectLabel(object)}${gameTarget ? ' · Selected in game' : ''}`;
+              const label = `${team && team !== 'neutral' ? `${t(titleCase(team))} ` : ''}${objectLabel(object, t)}${gameTarget ? t(' · Selected in game') : ''}`;
               return (
                 <button
                   key={`${object.type}-${index}`}
@@ -763,8 +770,8 @@ export default function Home() {
                   key={`memory-${track.id}`}
                   className={`map-marker ${actorKind(object)}-contact hostile memory ${object.type === 'ground_model' ? 'ground' : ''} ${selectedTrackId === track.id ? 'selected' : ''}`}
                   style={{ left: `${object.x * 100}%`, top: `${object.y * 100}%`, opacity: memoryOpacity }}
-                  aria-label={`${objectLabel(object)}, last seen ${ageSeconds} seconds ago`}
-                  title={`E-${track.id.toString().padStart(2, '0')} · ${objectLabel(object)} · last seen ${ageSeconds}s ago`}
+                  aria-label={t('{contact}, last seen {seconds}s ago', { contact: objectLabel(object, t), seconds: ageSeconds })}
+                  title={`E-${track.id.toString().padStart(2, '0')} · ${objectLabel(object, t)} · ${t('Last seen {seconds}s ago', { seconds: ageSeconds })}`}
                   onClick={(event) => {
                     event.stopPropagation();
                     setSelectedTrackId(track.id);
@@ -774,7 +781,7 @@ export default function Home() {
                   {object.type === 'aircraft'
                     ? <AircraftSymbol role={aircraftRole(object)} heading={headingFromObject(object)} />
                     : <span className="marker-symbol">{markerGlyph(object)}</span>}
-                  <small>E-{track.id.toString().padStart(2, '0')} · {ageSeconds}s</small>
+                  <small>E-{track.id.toString().padStart(2, '0')} · {t('{seconds}s', { seconds: ageSeconds })}</small>
                 </button>
               );
             })}
@@ -784,7 +791,7 @@ export default function Home() {
                 key={`team-ping-${cue.id}`}
                 className="team-ping-marker"
                 style={{ left: `${cue.point.x * 100}%`, top: `${cue.point.y * 100}%` }}
-                aria-label={`Team ping ${cue.grid}: ${cue.body}`}
+                aria-label={t('Team ping {grid}: {message}', { grid: cue.grid, message: cue.body })}
                 title={`${cue.grid} · ${cue.body}`}
                 onClick={(event) => {
                   event.stopPropagation();
@@ -792,7 +799,7 @@ export default function Home() {
                 }}
               >
                 <span>{cue.grid}</span>
-                <small>{cue.age}s</small>
+                <small>{t('{seconds}s', { seconds: cue.age })}</small>
               </button>
             ))}
           </div>
@@ -800,64 +807,65 @@ export default function Home() {
 
         <header className="topbar">
           <div>
-            <p className="eyebrow">Vector / Live map</p>
-            <h1>Current battle</h1>
+            <p className="eyebrow">{t("Vector / Live map")}</p>
+            <h1>{t("Current battle")}</h1>
           </div>
           <div className={`connection-pill ${connected ? '' : 'offline'}`}>
-            <span /> {connected ? 'Live' : 'Game disconnected'}
+            <span /> {connected ? t("Live") : t("Game disconnected")}
           </div>
         </header>
 
         {!connected && (
           <div className="feed-banner" role="status">
-            <strong>{everConnected ? 'Game connection lost' : 'Waiting for a battle'}</strong>
-            <span>{everConnected ? 'Showing the last known positions.' : 'Enter a battle in War Thunder to connect.'}</span>
+            <strong>{everConnected ? t("Game connection lost") : t("Waiting for a battle")}</strong>
+            <span>{everConnected ? t("Showing the last known positions.") : t("Enter a battle in War Thunder to connect.")}</span>
           </div>
         )}
 
         {selectedObject && (
           <article className="selection-card">
-            <button aria-label="Close contact details" onClick={() => { setSelectedIndex(null); setSelectedTrackId(null); }}>×</button>
-            <p>{selectedTrack && !selectedTrack.active ? `Last seen · ${actorLabel(selectedObject)}` : isEnemy(selectedObject) ? `Enemy · ${actorLabel(selectedObject)}` : `${actorLabel(selectedObject)} contact`}</p>
-            <strong>{selectedTrack ? `E-${selectedTrack.id.toString().padStart(2, '0')} · ` : ''}{objectLabel(selectedObject)}</strong>
+            <button aria-label={t("Close contact details")} onClick={() => { setSelectedIndex(null); setSelectedTrackId(null); }}>×</button>
+            <p>{selectedTrack && !selectedTrack.active ? `${t('Last seen')} · ${actorLabel(selectedObject, t)}` : isEnemy(selectedObject) ? `${t('Enemy')} · ${actorLabel(selectedObject, t)}` : t('{kind} contact', { kind: actorLabel(selectedObject, t) })}</p>
+            <strong>{selectedTrack ? `E-${selectedTrack.id.toString().padStart(2, '0')} · ` : ''}{objectLabel(selectedObject, t)}</strong>
             <div>
-              <span>{selectedDistance == null ? notAvailable : selectedDistance.toFixed(1)} km</span>
-              <span>{Math.round(selectedHeading).toString().padStart(3, '0')}° heading</span>
-              <span>{gridSquare(selectedObject, mapInfo)}</span>
+              <span>{number(selectedDistance, 1)}{' '}{t("km")}</span>
+              <span>{Math.round(selectedHeading).toString().padStart(3, '0')}{t("° heading")}</span>
+              <span>{t(gridSquare(selectedObject, mapInfo))}</span>
             </div>
-            {selectedTrack && !selectedTrack.active && <small>Last seen {Math.max(1, Math.floor((clock - selectedTrack.lastSeen) / 1000))}s ago</small>}
+            {selectedTrack && !selectedTrack.active && <small>{t('Last seen {seconds}s ago', { seconds: Math.max(1, Math.floor((clock - selectedTrack.lastSeen) / 1000)) })}</small>}
           </article>
         )}
 
-        <div className="map-tools" aria-label="Map controls">
-          <button aria-label="Zoom in" title="Zoom in (+)" onClick={() => setZoomSafe(zoom + 0.25)}>+</button>
-          <button aria-label="Zoom out" title="Zoom out (−)" onClick={() => setZoomSafe(zoom - 0.25)}>−</button>
-          <button className={autoFit === 'air' ? 'active' : ''} aria-pressed={autoFit === 'air'} aria-label="Fit map to aircraft" title="Fit map to aircraft (0)" onClick={() => enableAutoFit('air')}>⤢</button>
-          <button className={autoFit === 'battle' ? 'active' : ''} aria-pressed={autoFit === 'battle'} aria-label="Fit map between airfields" title="Fit map between airfields (B)" onClick={() => enableAutoFit('battle')}>B</button>
-          <button aria-label="Center on your aircraft" title="Center on your aircraft (C)" onClick={centerPlayer}>⌖</button>
+        <div className="map-tools" aria-label={t("Map controls")}>
+          <button aria-label={t("Zoom in")} title={t("Zoom in (+)")} onClick={() => setZoomSafe(zoom + 0.25)}>+</button>
+          <button aria-label={t("Zoom out")} title={t("Zoom out (−)")} onClick={() => setZoomSafe(zoom - 0.25)}>−</button>
+          <button className={autoFit === 'air' ? 'active' : ''} aria-pressed={autoFit === 'air'} aria-label={t("Fit map to aircraft")} title={t("Fit map to aircraft (0)")} onClick={() => enableAutoFit('air')}>⤢</button>
+          <button className={autoFit === 'battle' ? 'active' : ''} aria-pressed={autoFit === 'battle'} aria-label={t("Fit map between airfields")} title={t("Fit map between airfields (B)")} onClick={() => enableAutoFit('battle')}>B</button>
+          <button aria-label={t("Center on your aircraft")} title={t("Center on your aircraft (C)")} onClick={centerPlayer}>⌖</button>
         </div>
 
-        <div className="filter-bar" aria-label="Map layers">
-          <button className={filters.air ? 'active' : ''} aria-pressed={filters.air} onClick={() => toggleFilter('air')}><i className="air-i" /> Aircraft</button>
-          <button className={filters.ground ? 'active' : ''} aria-pressed={filters.ground} onClick={() => toggleFilter('ground')}><i className="ground-i" /> Ground</button>
-          <button className={filters.objectives ? 'active' : ''} aria-pressed={filters.objectives} onClick={() => toggleFilter('objectives')}><i className="objective-i" /> Objectives</button>
-          <button className={filters.airfields ? 'active' : ''} aria-pressed={filters.airfields} onClick={() => toggleFilter('airfields')}><i className="airfield-i" /> Airfields</button>
-          <button className={filters.spawns ? 'active' : ''} aria-pressed={filters.spawns} onClick={() => toggleFilter('spawns')}><i className="spawn-i" /> Spawns</button>
-          <button className={showMemory ? 'active' : ''} aria-pressed={showMemory} onClick={() => setShowMemory((visible) => !visible)}><i className="memory-i" /> Last positions</button>
+        <div className="filter-bar" aria-label={t("Map layers")}>
+          <button className={filters.air ? 'active' : ''} aria-pressed={filters.air} onClick={() => toggleFilter('air')}><i className="air-i" />{' '}{t("Aircraft")}</button>
+          <button className={filters.ground ? 'active' : ''} aria-pressed={filters.ground} onClick={() => toggleFilter('ground')}><i className="ground-i" />{' '}{t("Ground")}</button>
+          <button className={filters.objectives ? 'active' : ''} aria-pressed={filters.objectives} onClick={() => toggleFilter('objectives')}><i className="objective-i" />{' '}{t("Objectives")}</button>
+          <button className={filters.airfields ? 'active' : ''} aria-pressed={filters.airfields} onClick={() => toggleFilter('airfields')}><i className="airfield-i" />{' '}{t("Airfields")}</button>
+          <button className={filters.spawns ? 'active' : ''} aria-pressed={filters.spawns} onClick={() => toggleFilter('spawns')}><i className="spawn-i" />{' '}{t("Spawns")}</button>
+          <button className={showMemory ? 'active' : ''} aria-pressed={showMemory} onClick={() => setShowMemory((visible) => !visible)}><i className="memory-i" />{' '}{t("Last positions")}</button>
         </div>
 
-        <div className="scale-bar"><span /> {gridKm.toFixed(gridKm % 1 ? 1 : 0)} km grid</div>
+        <div className="scale-bar"><span /> {number(gridKm, gridKm % 1 ? 1 : 0)}{' '}{t("km grid")}</div>
         </>}
       </section>
 
       <aside className="intel-panel">
         <div className="panel-heading">
-          <p className="eyebrow">{overview ? 'Vector / Session' : 'Vector / Battle'}</p>
+          <p className="eyebrow">{overview ? t("Vector / Session") : t("Vector / Battle")}</p>
+          <LanguageSelector />
           <span className={`status-dot ${connected ? '' : 'offline'}`} />
         </div>
-        <h2>{intelTab === 'contacts' ? 'Contacts' : intelTab === 'activity' ? 'Combat activity' : 'Battle results'}</h2>
+        <h2>{intelTab === 'contacts' ? t("Contacts") : intelTab === 'activity' ? t("Combat activity") : t("Battle results")}</h2>
 
-        <div className="intel-tabs" role="tablist" aria-label="Battle panels">
+        <div className="intel-tabs" role="tablist" aria-label={t("Battle panels")}>
           {(['contacts', 'activity', 'results'] as const).map((tab) => (
             <button
               key={tab}
@@ -876,34 +884,34 @@ export default function Home() {
                 setIntelTab(next);
                 document.getElementById(`intel-tab-${next}`)?.focus();
               }}
-            ><GameIcon name={tab === 'contacts' ? 'target' : tab} />{tab[0].toUpperCase() + tab.slice(1)}{tab === 'activity' && activity.eventCount > 0 && <span className="intel-tab-count">{activity.eventCount}</span>}</button>
+            ><GameIcon name={tab === 'contacts' ? 'target' : tab} />{t(tab[0].toUpperCase() + tab.slice(1))}{tab === 'activity' && activity.eventCount > 0 && <span className="intel-tab-count">{activity.eventCount}</span>}</button>
           ))}
         </div>
 
         <div id="intel-panel-contacts" className="intel-tab-panel" role="tabpanel" aria-labelledby="intel-tab-contacts" hidden={intelTab !== 'contacts'} tabIndex={0}>
 
-        <section className="actor-legend" aria-label="Map color legend">
-          <span className="air-ally"><i />Allied aircraft</span>
-          <span className="air-enemy"><i />Enemy aircraft</span>
-          <span className="ground-ally"><i />Allied ground</span>
-          <span className="ground-enemy"><i />Enemy ground</span>
+        <section className="actor-legend" aria-label={t("Map color legend")}>
+          <span className="air-ally"><i />{t("Allied aircraft")}</span>
+          <span className="air-enemy"><i />{t("Enemy aircraft")}</span>
+          <span className="ground-ally"><i />{t("Allied ground")}</span>
+          <span className="ground-enemy"><i />{t("Enemy ground")}</span>
         </section>
 
-        <section className="air-role-legend" aria-label="Aircraft role markings">
+        <section className="air-role-legend" aria-label={t("Aircraft role markings")}>
           {(['fighter', 'assault', 'bomber', 'unknown'] as const).map((role) => (
-            <span key={role}><AircraftSymbol role={role} />{AIRCRAFT_MARKS[role].label}</span>
+            <span key={role}><AircraftSymbol role={role} />{t(AIRCRAFT_MARKS[role].label)}</span>
           ))}
         </section>
 
         <section className="picture-summary">
-          <span><b>{airContacts.length}</b> aircraft</span>
-          <span><b>{groundContacts.length}</b> ground</span>
-          <span><b>{lostEnemyCount}</b> last seen</span>
+          <span>{t("Aircraft")}{' '}<b>{airContacts.length}</b></span>
+          <span>{t("Ground")}{' '}<b>{groundContacts.length}</b></span>
+          <span>{t("Last seen")}{' '}<b>{lostEnemyCount}</b></span>
         </section>
 
         {missionObjectives.length > 0 && (
-          <section className="mission-brief" aria-label="Mission objectives">
-            <header><span>Mission</span><small>{titleCase(mission.status ?? 'active')}</small></header>
+          <section className="mission-brief" aria-label={t("Mission objectives")}>
+            <header><span>{t("Mission")}</span><small>{t(titleCase(mission.status ?? 'active'))}</small></header>
             {missionObjectives.map((objective, index) => (
               <div key={`${objective.text}-${index}`} className={`mission-objective ${objective.status ?? 'in_progress'}`}>
                 <i /><p>{objective.text}</p>
@@ -913,37 +921,37 @@ export default function Home() {
         )}
 
         {teamCues.length > 0 && (
-          <section className="team-cues" aria-label="Recent team map pings">
-            <header><span>Team pings</span><small>{teamCues.length} recent</small></header>
+          <section className="team-cues" aria-label={t("Recent team map pings")}>
+            <header><span>{t("Team pings")}</span><small>{teamCues.length}{' '}{t("recent")}</small></header>
             {teamCues.map((cue) => (
               <button key={`team-cue-${cue.id}`} onClick={() => focusPoint(cue.point)}>
                 <b>{cue.grid}</b>
                 <span>
-                  <strong>{cue.body || 'Team callout'}</strong>
-                  <small>{[cue.detail, cue.sender, `${cue.age}s ago`].filter(Boolean).join(' · ')}</small>
+                  <strong>{cue.body || t("Team callout")}</strong>
+                  <small>{[cue.detail, cue.sender, t('{seconds}s ago', { seconds: cue.age })].filter(Boolean).join(' · ')}</small>
                 </span>
               </button>
             ))}
           </section>
         )}
 
-        <section className="contact-log" aria-label="Last known enemy positions">
+        <section className="contact-log" aria-label={t("Last known enemy positions")}>
           <div className="contact-log-heading">
-            <div><span>Enemy aircraft</span><small>Last {ENEMY_MEMORY_MS / 1000}s</small></div>
+            <div><span>{t("Enemy aircraft")}</span><small>{t('Last {seconds}s', { seconds: ENEMY_MEMORY_MS / 1000 })}</small></div>
             <button
               onClick={() => { clearMemory(); setSelectedTrackId(null); }}
               disabled={!contactRows.some((track) => !track.active)}
-              title="Clear last known positions"
-            >Clear old</button>
+              title={t("Clear last known positions")}
+            >{t("Clear old")}</button>
           </div>
           <div className="contact-table-wrap">
             <table>
               <thead>
-                <tr><th>Contact</th><th>Grid</th><th>Range</th><th aria-label="Bearing" title="Bearing">Brg.</th><th>Seen</th></tr>
+                <tr><th>{t("Contact")}</th><th>{t("Grid")}</th><th>{t("Range")}</th><th aria-label={t("Bearing")} title={t("Bearing")}>{t("Brg.")}</th><th>{t("Seen")}</th></tr>
               </thead>
               <tbody>
                 {contactRows.length === 0 && (
-                  <tr className="empty-row"><td colSpan={5}>No enemy aircraft spotted</td></tr>
+                  <tr className="empty-row"><td colSpan={5}>{t("No enemy aircraft spotted")}</td></tr>
                 )}
                 {contactRows.slice(0, 12).map((track) => {
                   const ageSeconds = Math.max(1, Math.floor((clock - track.lastSeen) / 1000));
@@ -953,7 +961,7 @@ export default function Home() {
                       className={`${track.active ? 'active-track' : 'lost-track'} ${actorKind(track.object)}-track ${selectedTrackId === track.id ? 'selected-track' : ''}`}
                       tabIndex={0}
                       role="button"
-                      aria-label={`Enemy track E-${track.id}, ${track.active ? 'live' : `last seen ${ageSeconds} seconds ago`}`}
+                      aria-label={t('Enemy track E-{id}, {status}', { id: track.id, status: track.active ? t('Live') : t('Last seen {seconds}s ago', { seconds: ageSeconds }) })}
                       onClick={() => {
                         setSelectedTrackId(track.id);
                         setSelectedIndex(null);
@@ -968,11 +976,11 @@ export default function Home() {
                         }
                       }}
                     >
-                      <td><AircraftSymbol role={aircraftRole(track.object)} /><span>E-{track.id.toString().padStart(2, '0')}</span><small>{actorLabel(track.object)} · {objectLabel(track.object)}</small></td>
-                      <td>{gridSquare(track.object, mapInfo)}</td>
-                      <td>{track.distance == null ? notAvailable : track.distance.toFixed(1)}<small>km</small></td>
-                      <td>{track.bearing == null ? notAvailable : Math.round(track.bearing).toString().padStart(3, '0')}<small>°</small></td>
-                      <td><b>{track.active ? 'Live' : `${ageSeconds}s`}</b></td>
+                      <td><AircraftSymbol role={aircraftRole(track.object)} /><span>E-{track.id.toString().padStart(2, '0')}</span><small>{actorLabel(track.object, t)} · {objectLabel(track.object, t)}</small></td>
+                      <td>{t(gridSquare(track.object, mapInfo))}</td>
+                      <td>{number(track.distance, 1)}<small>{t("km")}</small></td>
+                      <td>{track.bearing == null ? unavailable : Math.round(track.bearing).toString().padStart(3, '0')}<small>°</small></td>
+                      <td><b>{track.active ? t("Live") : t('{seconds}s', { seconds: ageSeconds })}</b></td>
                     </tr>
                   );
                 })}
@@ -991,7 +999,7 @@ export default function Home() {
           <FileBattlesPanel archive={archive} account={account} accounts={accounts} onAccountChange={setSelectedAccount} />
         </div>
 
-        <footer className="panel-footer"><span>WT :8111</span><span>Local / Read-only</span></footer>
+        <footer className="panel-footer"><span>{t("WT :8111")}</span><span>{t("Local / Read-only")}</span></footer>
       </aside>
     </main>
   );

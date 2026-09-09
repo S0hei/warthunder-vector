@@ -20,15 +20,17 @@ namespace VectorPortable
         private readonly TcpListener listener;
         private readonly CombatTeamFeed teams;
         private readonly BattleFileStore battles;
-        private readonly byte[] html;
+        private readonly string html;
         private readonly string token;
         private readonly string instance = Guid.NewGuid().ToString("N");
+        private readonly LanguageSettings languages;
         private readonly Semaphore clients = new Semaphore(8, 8);
         private volatile bool stopped;
         public readonly string Origin;
 
-        public LocalServer(BattleFileStore battles, int port, CombatTeamFeed teams = null)
+        public LocalServer(BattleFileStore battles, int port, CombatTeamFeed teams = null, LanguageSettings languages = null)
         {
+            this.languages = languages;
             this.teams = teams ?? new CombatTeamFeed();
             this.battles = battles;
             byte[] secret = new byte[32];
@@ -41,8 +43,7 @@ namespace VectorPortable
             using (Stream source = Assembly.GetExecutingAssembly().GetManifestResourceStream("Vector.html"))
             using (StreamReader reader = new StreamReader(source, Encoding.UTF8))
             {
-                string boot = "<script>window.__VECTOR__={origin:'" + Origin + "',token:'" + token + "',version:'" + VectorVersion.Current + "',instance:'" + instance + "'};</script>";
-                html = Encoding.UTF8.GetBytes(reader.ReadToEnd().Replace("<head>", "<head>" + boot));
+                html = reader.ReadToEnd();
             }
             new Thread(Accept) { IsBackground = true, Name = "Vector loopback server" }.Start();
         }
@@ -67,7 +68,7 @@ namespace VectorPortable
                 client.SendTimeout = 3000;
                 using (NetworkStream stream = client.GetStream())
                 {
-                    // Read bounded ASCII headers only: no request bodies, uploads or routes to files.
+                    // Bounded headers; only the authenticated language setting accepts a tiny JSON body.
                     var header = new StringBuilder();
                     while (header.Length < 16384)
                     {
@@ -90,8 +91,33 @@ namespace VectorPortable
                     string host, origin, supplied;
                     if (request.Length != 3 || !fields.TryGetValue("Host", out host) || host != new Uri(Origin).Authority ||
                         (fields.TryGetValue("Origin", out origin) && origin != Origin)) { Reply(stream, 403, "text/plain", new byte[0]); return; }
+                    if (request[1] == "/api/language" && languages != null)
+                    {
+                        if (!fields.TryGetValue("X-Vector-Token", out supplied) || supplied != token) { Reply(stream, 403, "text/plain", new byte[0]); return; }
+                        if (request[0] == "PUT")
+                        {
+                            string type, lengthText; int length;
+                            if (origin != Origin) { Reply(stream, 403, "text/plain", new byte[0]); return; }
+                            if (fields.ContainsKey("Transfer-Encoding") || !fields.TryGetValue("Content-Type", out type) || type.Split(';')[0] != "application/json" ||
+                                !fields.TryGetValue("Content-Length", out lengthText) || !int.TryParse(lengthText, out length) || length < 1 || length > 128)
+                            { Reply(stream, 400, "text/plain", new byte[0]); return; }
+                            var body = new byte[length]; int offset = 0;
+                            while (offset < length) { int count = stream.Read(body, offset, length - offset); if (count == 0) return; offset += count; }
+                            string preference;
+                            try { preference = Encoding.UTF8.GetString(body); LanguageSettings.ParsePreference(preference); }
+                            catch { Reply(stream, 400, "text/plain", new byte[0]); return; }
+                            try { languages.Save(preference); }
+                            catch { Reply(stream, 500, "application/json", Encoding.UTF8.GetBytes("{\"error\":\"language-not-saved\"}")); return; }
+                        }
+                        else if (request[0] != "GET") { Reply(stream, 405, "text/plain", new byte[0]); return; }
+                        Reply(stream, 200, "application/json; charset=utf-8", Encoding.UTF8.GetBytes(languages.Json())); return;
+                    }
                     if (request[0] != "GET") { Reply(stream, 405, "text/plain", new byte[0]); return; }
-                    if (request[1] == "/" || request[1] == "/index.html") Reply(stream, 200, "text/html; charset=utf-8", html);
+                    if (request[1] == "/" || request[1] == "/index.html")
+                    {
+                        string boot = "<script>window.__VECTOR__={origin:'" + Origin + "',token:'" + token + "',version:'" + VectorVersion.Current + "',instance:'" + instance + "'" + (languages == null ? "" : ",language:" + languages.Json()) + "};</script>";
+                        Reply(stream, 200, "text/html; charset=utf-8", Encoding.UTF8.GetBytes(html.Replace("<head>", "<head>" + boot)));
+                    }
                     else if (request[1] == "/api/version") Reply(stream, 200, "application/json; charset=utf-8", Encoding.UTF8.GetBytes("{\"version\":\"" + VectorVersion.Current + "\",\"instance\":\"" + instance + "\"}"));
                     else if (request[1] == "/api/activity-teams" || request[1] == "/api/battles")
                     {
@@ -144,6 +170,7 @@ namespace VectorPortable
         private readonly EventWaitHandle reopen;
         private readonly GameFileCollector collector;
         private readonly AppUpdates updates;
+        private readonly LanguageSettings languages;
         private readonly ToolStripMenuItem updateStatus;
         private int updateTicks;
         private bool paused;
@@ -154,36 +181,40 @@ namespace VectorPortable
             string data = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Vector-data");
             var battles = new BattleFileStore(Path.Combine(data, "battles"));
             var teams = new CombatTeamFeed();
-            server = new LocalServer(battles, 8112, teams);
+            languages = new LanguageSettings(data, preference => LanguageDetection.Detect(preference, collector == null ? GameFileCollector.Discover() : collector.GameFolder));
+            server = new LocalServer(battles, 8112, teams, languages);
             collector = new GameFileCollector(battles, data, teams);
             updates = new AppUpdates(skipUpdate);
             var menu = new ContextMenuStrip();
-            menu.Items.Add("Open Vector", null, (s, e) => Open());
-            var pause = new ToolStripMenuItem("Pause history updates");
-            pause.Click += (s, e) => { paused = !paused; pause.Text = paused ? "Resume history updates" : "Pause history updates"; collector.Pause(paused); };
+            menu.Items.Add(Item("Open Vector", (s, e) => Open()));
+            var pause = Item("Pause history updates", null);
+            pause.Click += (s, e) => { paused = !paused; pause.Tag = paused ? "Resume history updates" : "Pause history updates"; pause.Text = languages.Text((string)pause.Tag); collector.Pause(paused); };
             menu.Items.Add(pause);
-            menu.Items.Add("Choose War Thunder folder…", null, (s, e) => {
-                using (var picker = new FolderBrowserDialog { Description = "Select your War Thunder installation folder", ShowNewFolderButton = false })
+            menu.Items.Add(Item("Choose War Thunder folder…", (s, e) => {
+                using (var picker = new FolderBrowserDialog { Description = languages.Text("Select your War Thunder installation folder"), ShowNewFolderButton = false })
                 {
                     if (picker.ShowDialog() != DialogResult.OK) return;
-                    try { collector.Choose(picker.SelectedPath); }
-                    catch (Exception error) { MessageBox.Show(error.Message, "Vector"); }
+                    try { collector.Choose(picker.SelectedPath); languages.Refresh(); }
+                    catch (InvalidDataException error) { MessageBox.Show(languages.Text(error.Message), "Vector"); }
+                    catch { MessageBox.Show(languages.Text("Could not use this folder. Check folder access and free disk space."), "Vector"); }
                 }
-            });
+            }));
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add(new ToolStripMenuItem("Vector " + VectorVersion.Current) { Enabled = false });
-            updateStatus = new ToolStripMenuItem("Checking for app updates") { Enabled = false };
+            updateStatus = new ToolStripMenuItem(languages.Text("Checking for app updates")) { Enabled = false };
             menu.Items.Add(updateStatus);
-            menu.Items.Add("Check for app updates", null, (s, e) => ThreadPool.QueueUserWorkItem(_ => updates.Check(true)));
+            menu.Items.Add(Item("Check for app updates", (s, e) => ThreadPool.QueueUserWorkItem(_ => updates.Check(true))));
             menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add("Exit Vector", null, (s, e) => ExitThread());
+            menu.Items.Add(Item("Exit Vector", (s, e) => ExitThread()));
             trayIcon = VectorBrand.LoadIcon(SystemInformation.SmallIconSize);
-            tray = new NotifyIcon { Icon = trayIcon, Text = "Vector: automatic battle history", ContextMenuStrip = menu, Visible = true };
+            tray = new NotifyIcon { Icon = trayIcon, Text = languages.Text("Vector: automatic battle history"), ContextMenuStrip = menu, Visible = true };
             tray.DoubleClick += (s, e) => Open();
             timer = new System.Windows.Forms.Timer { Interval = 1000 };
             timer.Tick += (s, e) => {
                 if (reopen.WaitOne(0)) Open();
-                updateStatus.Text = updates.Status;
+                updateStatus.Text = languages.Text(updates.Status);
+                foreach (ToolStripItem item in menu.Items) if (item.Tag is string) item.Text = languages.Text((string)item.Tag);
+                tray.Text = languages.Text("Vector: automatic battle history");
                 if (updates.ReadyToExit) { ExitThread(); return; }
                 if (++updateTicks % 15 == 0) ThreadPool.QueueUserWorkItem(_ => updates.TryInstall());
             };
@@ -191,10 +222,13 @@ namespace VectorPortable
             if (openBrowser) Open();
         }
 
+        private ToolStripMenuItem Item(string text, EventHandler click)
+        { return new ToolStripMenuItem(languages.Text(text), null, click) { Tag = text }; }
+
         private void Open()
         {
             try { Process.Start(new ProcessStartInfo(server.Origin + "/") { UseShellExecute = true }); }
-            catch { MessageBox.Show("Open " + server.Origin + "/ in your browser.", "Vector"); }
+            catch { MessageBox.Show(languages.Text("Open {url} in your browser.").Replace("{url}", server.Origin + "/"), "Vector"); }
         }
 
         protected override void ExitThreadCore()

@@ -8,7 +8,7 @@ export function allowedVectorRequest(req) {
 export function vectorDevBridge() {
   return { name: 'vector-local-collector', apply: 'serve', configureServer(server) {
     server.middlewares.use(async (req, res, next) => {
-      const route = { '/api/vector/battles': '/api/battles', '/api/vector/activity-teams': '/api/activity-teams' }[req.url];
+      const route = { '/api/vector/battles': '/api/battles', '/api/vector/activity-teams': '/api/activity-teams', '/api/vector/language': '/api/language' }[req.url];
       if (!route) return next();
       res.setHeader('Cache-Control', 'no-store'); res.setHeader('X-Content-Type-Options', 'nosniff');
       if (req.method !== 'GET' || !allowedVectorRequest(req)) { res.statusCode = 403; res.end(); return; }
@@ -17,7 +17,7 @@ export function vectorDevBridge() {
         const bootstrap = await fetch(origin, { signal: AbortSignal.timeout(2000), redirect: 'error' });
         if (!bootstrap.ok) throw new Error('Collector offline');
         const html = await bootstrap.text();
-        const token = /window\.__VECTOR__=\{origin:'http:\/\/127\.0\.0\.1:8112',token:'([a-f0-9]{64})'\}/.exec(html)?.[1];
+        const token = /window\.__VECTOR__=\{origin:'http:\/\/127\.0\.0\.1:8112',token:'([a-f0-9]{64})'(?=[,}])/.exec(html)?.[1];
         if (!token) throw new Error('No collector bootstrap');
         const result = await fetch(`${origin}${route}`, { headers: { 'X-Vector-Token': token }, signal: AbortSignal.timeout(2000), redirect: 'error' });
         if (!result.ok) throw new Error('Collector not updated');

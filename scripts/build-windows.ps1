@@ -17,8 +17,9 @@ $vectorHtml = Join-Path $vectorRoot 'Vector.html'
 if (-not (Test-Path -LiteralPath $vectorHtml)) { throw 'Build Vector.html before the Windows launcher.' }
 $vectorOutput = Join-Path $vectorRoot $OutputName
 $vectorSource = Join-Path $vectorRoot 'native\Vector.cs'
+$vectorLanguage = Join-Path $vectorRoot 'app\lib\translations\ru.json'
 $vectorIcon = Join-Path $vectorRoot 'public\vector.ico'
 if (-not (Test-Path -LiteralPath $vectorIcon)) { throw 'Vector icon is missing: public/vector.ico.' }
-& $vectorCompiler /nologo /target:winexe /platform:anycpu /optimize+ /utf8output "/out:$vectorOutput" "/win32icon:$vectorIcon" "/resource:$vectorIcon,Vector.ico" "/resource:$vectorHtml,Vector.html" /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /reference:System.Web.Extensions.dll $vectorSource (Join-Path $vectorRoot 'native\GameFiles.cs') (Join-Path $vectorRoot 'native\Updates.cs') $vectorVersionSource
+& $vectorCompiler /nologo /target:winexe /platform:anycpu /optimize+ /utf8output "/out:$vectorOutput" "/win32icon:$vectorIcon" "/resource:$vectorIcon,Vector.ico" "/resource:$vectorHtml,Vector.html" "/resource:$vectorLanguage,Vector.ru.json" /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /reference:System.Web.Extensions.dll $vectorSource (Join-Path $vectorRoot 'native\GameFiles.cs') (Join-Path $vectorRoot 'native\Updates.cs') (Join-Path $vectorRoot 'native\Languages.cs') $vectorVersionSource
 if ($LASTEXITCODE -ne 0) { throw 'Vector.exe compilation failed.' }
 Write-Host ('Portable Windows app created: {0} ({1:N0} KB)' -f $vectorOutput, ((Get-Item -LiteralPath $vectorOutput).Length / 1KB))

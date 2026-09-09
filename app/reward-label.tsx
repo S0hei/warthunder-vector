@@ -1,3 +1,4 @@
+import { useTranslation } from './language-provider';
 import { GameLabel } from './game-icon';
 
 const labels = {
@@ -6,5 +7,6 @@ const labels = {
 } as const;
 
 export default function RewardLabel({ kind, short = false }: { kind: keyof typeof labels; short?: boolean }) {
-  return <GameLabel icon={kind === 'wp' ? 'silverLions' : 'experience'} title={labels[kind].detail}>{short ? labels[kind].short : labels[kind].name}</GameLabel>;
+  const { t } = useTranslation();
+  return <GameLabel icon={kind === 'wp' ? 'silverLions' : 'experience'} title={t(labels[kind].detail)}>{t(short ? labels[kind].short : labels[kind].name)}</GameLabel>;
 }

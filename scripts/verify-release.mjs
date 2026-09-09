@@ -15,6 +15,8 @@ const exeName = process.argv[2] ?? 'Vector.exe';
 assert(/^[\w .-]+\.exe$/.test(exeName) && !exeName.includes('..'), 'Expected an executable filename');
 const exe = await readFile(new URL(exeName, root)), html = await readFile(new URL('Vector.html', root));
 assert(exe.includes(html), 'Executable embeds the current portable HTML');
+assert(exe.includes(await readFile(new URL('app/lib/translations/ru.json', root))), 'Executable embeds the current tray translations');
+for (const text of ['Русский', 'Результаты боёв', 'vector-language']) assert(html.includes(text), `Portable language support: ${text}`);
 for (const font of fonts) assert(html.includes((await readFile(new URL(`app/assets/fonts/${font.file}`, root))).toString('base64')));
 for (const text of ['Apache License', 'Last damage', 'Custom period', '/api/version']) assert(html.includes(text), text);
 assert(!/main\.tsx|<script\b[^>]*\bsrc=/i.test(html.toString()), 'No external app scripts');
