@@ -1,0 +1,82 @@
+name: Windows release
+
+on:
+  push:
+    tags: ['v[0-9]*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+      - name: Validate release version
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          if ($env:RELEASE_TAG -cne "v$version") { throw 'Tag must match package.json version.' }
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          npm install --global pnpm@11.19.0
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pnpm install --frozen-lockfile
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Check and build
+        shell: pwsh
+        run: |
+          pnpm exec tsc --noEmit
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pnpm lint
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pnpm test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pnpm build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pnpm build:portable
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pnpm test:windows
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/verify-release.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Publish verified release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $endpoint = "repos/$env:GITHUB_REPOSITORY/releases/tags/$env:RELEASE_TAG"
+          $existing = gh api $endpoint 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            if (-not ($existing | ConvertFrom-Json).draft) { throw 'Published releases are never overwritten.' }
+          } else {
+            gh release create $env:RELEASE_TAG --draft --verify-tag --title "Vector $env:RELEASE_TAG" --notes-file .github/release-notes.md
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          gh release upload $env:RELEASE_TAG Vector.exe Vector.html SHA256SUMS --clobber
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $releaseJson = gh api $endpoint
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $release = $releaseJson | ConvertFrom-Json
+          foreach ($name in @('Vector.exe', 'Vector.html', 'SHA256SUMS')) {
+            $asset = @($release.assets | Where-Object name -CEQ $name)
+            $digest = 'sha256:' + (Get-FileHash -LiteralPath $name -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($asset.Count -ne 1 -or $asset[0].digest -cne $digest -or $asset[0].size -ne (Get-Item -LiteralPath $name).Length) { throw "Uploaded asset verification failed: $name" }
+          }
+          gh release edit $env:RELEASE_TAG --draft=false --latest
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

@@ -1,0 +1,51 @@
+Vector game display data and icons
+
+Aircraft and map names, UI icons, operator/nation metadata and country flags are extracted
+War Thunder game resources, accessed through the public War-Thunder-Datamine
+repository. War Thunder and its game assets belong to Gaijin Games Kft.
+Vector is an unofficial companion and is not affiliated with Gaijin.
+
+Source: https://github.com/gszabi99/War-Thunder-Datamine
+Revision: 412aab2a8773298d6cf9b872af94b30cf0d23eef
+Files: lang.vromfs.bin_u/lang/units.csv
+       lang.vromfs.bin_u/lang/missions_locations.csv
+       char.vromfs.bin_u/config/unittags.blkx
+       atlases.vromfs.bin_u/gameuiskin/country_*.svg
+       atlases.vromfs.bin_u/gameuiskin/wp_coin.png
+       atlases.vromfs.bin_u/gameuiskin/lb_online_exp_gained_for_common.svg
+       atlases.vromfs.bin_u/gameuiskin/lb_victories_battles.svg
+       atlases.vromfs.bin_u/gameuiskin/lb_average_active_kills.svg
+       atlases.vromfs.bin_u/gameuiskin/lb_average_active_kills_by_spawn.svg
+       atlases.vromfs.bin_u/gameuiskin/lb_air_ground_kills.svg
+       atlases.vromfs.bin_u/gameuiskin/lb_deaths.svg
+       atlases.vromfs.bin_u/gameuiskin/lb_flyouts.svg
+       atlases.vromfs.bin_u/gameuiskin/lb_air_kills.svg
+       atlases.vromfs.bin_u/gameuiskin/lb_activity.svg
+       atlases.vromfs.bin_u/gameuiskin/lb_members_cnt.svg
+       atlases.vromfs.bin_u/gameuiskin/lb_target_hits.svg
+       atlases.vromfs.bin_u/gameuiskin/sh_statistics.svg
+
+The Republic of China flag uses lipis/flag-icons v7.5.0, flags/4x3/tw.svg:
+https://github.com/lipis/flag-icons/tree/v7.5.0
+
+The MIT License (MIT)
+
+Copyright (c) 2013 Panayiotis Lipiridis
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+of the Software, and to permit persons to whom the Software is furnished to do
+so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
