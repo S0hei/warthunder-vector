@@ -1,4 +1,4 @@
-## Vector 0.2.0
+## Vector 0.2.1
 
 - Automatic GitHub Release checks on launch and every hour while Vector runs.
 - Updates download in the background and install outside battle. The existing browser tab reconnects automatically.

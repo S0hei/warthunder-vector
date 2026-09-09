@@ -29,9 +29,11 @@ test('release version, pinned workflow, draft verification and public source exc
   assert.ok(read('native/Version.cs').includes(`Current = "${pkg.version}"`));
   for (const line of workflow.split('\n').filter(l => /uses:/.test(l))) assert.match(line, /@[a-f0-9]{40}/);
   assert.match(workflow, /persist-credentials: false/);
-  assert.match(workflow, /Published releases are never overwritten/);
-  assert.match(workflow, /Uploaded asset verification failed/);
-  assert.ok(workflow.indexOf('Uploaded asset verification failed') < workflow.indexOf('--draft=false'));
+  assert.match(workflow, /node scripts\/publish-release\.mjs/);
+  const publishing = read('scripts/publish-release.mjs');
+  assert.match(publishing, /Published releases are never overwritten/);
+  assert.match(publishing, /Uploaded asset verification failed/);
+  assert.ok(publishing.indexOf('verifyAssets(release, files)') < publishing.indexOf("'PATCH', { draft: false"));
   assert.doesNotMatch(workflow, /pull_request_target|id_ed25519|PRIVATE KEY/);
   for (const path of ['/Vector-data/', '/outputs/', '/.vite/', '/Vector.html', '/Vector.exe']) assert.ok(read('.gitignore').includes(path));
 });
