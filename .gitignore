@@ -40,6 +40,9 @@ next-env.d.ts
 /Vector-data/
 /Vector.exe
 /Vector-updated.exe
+/Vector-Chrome.exe
+/Vector-Result-Reader.exe
+/Vector-Result-Reader-updated.exe
 /.portable-build/
 /.vite/
 /Vector.html

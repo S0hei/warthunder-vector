@@ -7,9 +7,9 @@ import { componentLoader } from './component-test-loader.mjs';
 
 const language = componentLoader()('lib/language.ts');
 const labels = {
-  kills: ['Kills', 'Уничтожено', 'Уничт.'], deaths: ['Deaths', 'Потери', 'Потери'], spawns: ['Spawns', 'Возрождения', 'Возр.'],
-  killDeath: ['Kills / deaths', 'Уничтожено / потери', 'Уничт. / потери'],
-  killSpawn: ['Kills / spawns', 'Уничтожено / возрождения', 'Уничт. / возр.'],
+  kills: ['Kills', 'Фраги', 'Фраги'], deaths: ['Deaths', 'Смерти', 'Смерти'], spawns: ['Spawns', 'Спавны', 'Спавны'],
+  killDeath: ['Kills / deaths', 'Фраги / Смерти', 'Фраги / Смерти'],
+  killSpawn: ['Kills / spawns', 'Фраги / Спавны', 'Фраги / Спавны'],
 };
 
 test('compact Russian stat headings keep full tooltips, screen-reader text and game icons', () => {

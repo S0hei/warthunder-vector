@@ -79,6 +79,7 @@ test('Results and session copy preserve unavailable, not-final, conflict and air
     assert.match(html, /No result/); assert.match(html, /not final/i); assert.match(html, /N\/A/);
     assert.match(html, /G\.55S/); assert.match(html, /Kingdom of Italy/);
     assert.match(html, /1 kill/); assert.match(html, /1 death/);
+    assert.doesNotMatch(html, /Profile snapshots|Since snapshot|Connect Chrome|profile-summary|profile-settings/);
     assert.doesNotMatch(html, /[\u2012-\u2015]|Collector|Provisional|UNRESOLVED/);
     const conflict = { ...archive, battles: [{ ...result, conflict: true }] };
     assert.match(renderToStaticMarkup(createElement(component, { ...props, archive: conflict })), /Results disagree/);

@@ -20,6 +20,12 @@ Updates replace only the executable, preserving **Vector-data** and your saved b
 
 Older builds without this updater need one manual replacement with the latest Vector.exe. Close Vector using its tray menu first. The app is unsigned, so Windows may show a reputation warning. Vector is an unofficial companion, not a Gaijin product or a claim of Gaijin approval.
 
+## Local battle statistics
+
+Vector uses the game's local telemetry and files for Activity, battle history and session statistics. It does not collect website profile snapshots or require a browser extension, pairing key or WebView2. Final results that are not present in the local data remain unconfirmed.
+
+Upgrading from an experimental profile build leaves existing `Vector-data` files intact. Old profile snapshots and settings are no longer read or updated. If you installed the Vector Profile Connector in Chrome, you can remove it from Chrome's extensions page; Vector no longer accepts its requests.
+
 ## Language
 
 Choose **Auto**, **English** or **Русский** from the language selector at the top of the side panel. Changes apply immediately without resetting the map, filters or Activity observations. The Windows tray menu follows the same saved choice.
@@ -75,7 +81,7 @@ Only numeric battle fields and required match/account/vehicle labels are saved. 
 
 ## Kill ratios
 
-Kills are the replay's air + ground + naval kill counters; explicit AI counters stay separate. K/D divides total kills by deaths. K/spawn divides total kills by logged spawns, including the unit respawn emitted after airfield restoration. It does not count landings, repair starts or burning as spawns. Only the local player's currently assigned unit counts. Source-event timestamps deduplicate rescans and merge reconnects. Each ratio uses only battles with both required counters; coverage is shown beside it. Missing spawn evidence stays unavailable, never deaths + 1.
+Kills are the replay's air + ground + naval kill counters; explicit AI counters stay separate. K/D divides total kills by deaths. K/spawn divides total kills by actual logged spawns, excluding airfield restorations. Only the local player's currently assigned unit counts. Source-event timestamps deduplicate rescans and merge reconnects. Existing repair-inclusive records are corrected automatically when their logs are reread; counts without enough evidence remain unavailable. Each ratio uses only battles with both required counters; coverage is shown beside it. Missing spawn evidence is never inferred as deaths + 1.
 
 Clipboard polling, report import, copied-report parsing and the copied-results interface have been removed. Vector never opens the clipboard. Existing legacy report files are preserved but unused.
 
@@ -104,6 +110,8 @@ Bombing bases use small circle outlines; defence bases use rounded-square outlin
 If Vector says **Feed offline**, verify that `http://localhost:8111` opens while you are in a battle. Some menus and replays do not expose complete telemetry.
 
 ## Checks
+
+Telemetry validation, cancellation, map-image recovery and battle-transition regression cases are documented in [Telemetry reliability](docs/telemetry-reliability.md). Retired browser/profile and screen-reader experiments are not part of the app or its build.
 
 For development, use Node.js 24 and pnpm 11.19.0, then run `pnpm install --frozen-lockfile`. `pnpm test` runs combat-parser, aggregate, archive-decoding, activity and update regression tests. `pnpm exec tsc --noEmit` checks types. `pnpm build` checks the development service build; `pnpm build:portable` builds the standalone HTML and embeds it in the Windows executable. `pnpm test:windows` runs isolated native persistence, HTTP-security and updater handoff/rollback checks without accessing the clipboard or user archive. The Windows compiler is taken from the installed .NET Framework. `node scripts/verify-release.mjs` verifies bundled assets and creates release checksums.
 

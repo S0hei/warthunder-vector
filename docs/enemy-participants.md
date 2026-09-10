@@ -13,6 +13,11 @@ Selecting an ally in Events cannot silently carry an empty enemy-only selection
 into Participants. Clearing or searching works without changing battle data.
 
 Damage is a timestamped report: Critical, Severe, Shot down, Destroyed or Crashed.
+Shot down, Destroyed and Crashed cross out the enemy nickname and aircraft name
+in the table. The existing damage label, timestamp, country flag and team color
+remain readable. Critical, Severe and Unknown are not crossed out. The mark is
+derived from the report, not a new alive/dead estimate, and follows the report's
+existing reset rules below.
 It is **not** damage dealt, a hit-point percentage, current flightworthiness, or
 proof the aircraft remains destroyed. No report is shown as Unknown, not healthy.
 Only target events and the participant's own crash update received damage;

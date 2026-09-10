@@ -36,7 +36,7 @@ test('AI counters never inflate the non-AI kill/death ratio', () => {
   const s = summarizeFileBattles([battle()]); assert.equal(s.kd, 4); assert.equal(s.ai, 6);
 });
 
-test('kills per death and per spawn have independent denominators, including repair respawns', () => {
+test('kills per death and per statistical spawn have independent denominators', () => {
   const s = summarizeFileBattles([battle({ kills: 4, groundKills: 0, deaths: 1, spawns: 2 }), battle({ kills: 2, groundKills: 0, deaths: 1, spawns: 1 })]);
   assert.equal(s.kd, 3); assert.equal(s.ks, 2); assert.equal(s.spawns, 3); assert.equal(s.spawnKills, 6);
 });

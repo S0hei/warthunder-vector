@@ -40,8 +40,8 @@ export function localizedNumber(language: Language, value: number | null, digits
   return value === null ? translate(language, 'N/A') : value.toLocaleString(locales[language], { maximumFractionDigits: digits });
 }
 const russianCounts: Record<string, [string, string, string]> = {
-  battle: ['бой', 'боя', 'боёв'], kill: ['уничтожение', 'уничтожения', 'уничтожений'],
-  death: ['потеря', 'потери', 'потерь'], spawn: ['возрождение', 'возрождения', 'возрождений'],
+  battle: ['бой', 'боя', 'боёв'], kill: ['фраг', 'фрага', 'фрагов'],
+  death: ['смерть', 'смерти', 'смертей'], spawn: ['спавн', 'спавна', 'спавнов'],
   event: ['событие', 'события', 'событий'], second: ['секунда', 'секунды', 'секунд'],
   'saved record': ['запись', 'записи', 'записей'],
 };

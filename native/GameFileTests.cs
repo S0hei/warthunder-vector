@@ -127,20 +127,71 @@ internal static class GameFileTests
         flight(new BattleLogReader(start, store.Upsert));
         string path = Path.Combine(directory, "spawn-battles", "42-123456789abcdef.json");
         var b = json.Deserialize<FileBattle>(File.ReadAllText(path));
-        check(b.spawns == 3, "own initial spawn, airfield repair and new vehicle count separately, not enemy or old units");
+        check(b.spawns == 2 && b.spawnEvents.Length == 3 && b.spawnTypes.Values.Count(x => x == "repair") == 1,
+            "airfield restoration does not add a spawn; initial and new vehicle spawns still count");
         flight(new BattleLogReader(start, store.Upsert));
-        check(json.Deserialize<FileBattle>(File.ReadAllText(path)).spawns == 3, "spawn event keys deduplicate complete log rescans");
+        check(json.Deserialize<FileBattle>(File.ReadAllText(path)).spawns == 2, "spawn event keys deduplicate complete log rescans");
         var reconnected = new BattleLogReader(start.AddMinutes(5), store.Upsert);
         reconnected.Line(" 1.00 STOR online_storage::load_locally: userid=42, store=ignored");
         reconnected.Line(" 2.00 [D]  AcesMpContext: AcesApp::onJoinMatch : sessionId:123456789abcdef");
         reconnected.Line(" 3.00" + Player("Pilot", 1, true, 500));
         reconnected.Line(" 3.10" + Spawn(500, 11));
         reconnected.Line(" 4.00 [D]  AcesMission::endFinally 3 -1.000000");
-        check(json.Deserialize<FileBattle>(File.ReadAllText(path)).spawns == 4, "separate connection source events merge under the same battle");
+        check(json.Deserialize<FileBattle>(File.ReadAllText(path)).spawns == 3, "separate connection source events merge under the same battle");
         store.Upsert(ReplayMetadata.Read(new MemoryStream(Replay(true))));
-        check(json.Deserialize<FileBattle>(File.ReadAllText(path)).spawns == 4, "replay merge preserves logged spawns");
+        check(json.Deserialize<FileBattle>(File.ReadAllText(path)).spawns == 3, "replay merge preserves classified spawns without restoring repair counts");
         check(ReplayMetadata.Read(new MemoryStream(Replay(true))).spawns == null, "replay-only spawns are unknown, not deaths plus one");
-        check(new BattleFileStore(Path.Combine(directory, "spawn-battles")).Snapshot().Contains("\"spawns\":4"), "spawn counts survive archive reload");
+        check(new BattleFileStore(Path.Combine(directory, "spawn-battles")).Snapshot().Contains("\"spawns\":3"), "corrected spawn counts survive archive reload");
+
+        var legacy = json.Deserialize<FileBattle>(json.Serialize(b));
+        legacy.spawnTypes.Clear();
+        check(BattleFileStore.Valid(legacy) && legacy.spawns == null, "legacy timestamps without classifications never expose the inflated count");
+        string legacyDir = Path.Combine(directory, "legacy-spawn-battles"); Directory.CreateDirectory(legacyDir);
+        string legacyPath = Path.Combine(legacyDir, legacy.Key + ".json");
+        var fields = json.Deserialize<Dictionary<string, object>>(json.Serialize(legacy));
+        fields.Remove("spawnTypes"); fields["spawns"] = 3;
+        string original = json.Serialize(fields); File.WriteAllText(legacyPath, original);
+        var legacyStore = new BattleFileStore(legacyDir);
+        check(legacyStore.Snapshot().Contains("\"spawns\":null") && File.ReadAllText(legacyPath) == original,
+            "loading an old archive preserves its file and withholds unverified spawns");
+        check(legacyStore.NeedsSpawnEvidence(start, start.AddMinutes(2)) && !legacyStore.NeedsSpawnEvidence(start.AddHours(1), start.AddHours(2)),
+            "older-log backfill is limited to periods containing unclassified source events");
+        flight(new BattleLogReader(start, legacyStore.Upsert));
+        var corrected = json.Deserialize<FileBattle>(File.ReadAllText(legacyPath));
+        check(corrected.spawns == 2 && corrected.spawnEvents.SequenceEqual(b.spawnEvents) && File.ReadAllText(legacyPath + ".previous") == original,
+            "rereading logs corrects legacy repairs without deleting evidence and retains a backup");
+        check(!legacyStore.NeedsSpawnEvidence(start, start.AddMinutes(2)), "completed spawn classification no longer requests archival backfill");
+        legacyStore.Upsert(legacy); legacyStore.Upsert(ReplayMetadata.Read(new MemoryStream(Replay(true))));
+        check(json.Deserialize<FileBattle>(File.ReadAllText(legacyPath)).spawns == 2, "legacy and replay merges cannot resurrect excluded repairs");
+        var partial = json.Deserialize<FileBattle>(json.Serialize(b));
+        partial.spawnTypes.Remove(partial.spawnEvents[0]);
+        check(partial.spawns == null, "partially classified history never contributes an incomplete spawn ratio");
+
+        FileBattle lifecycle = null;
+        var events = new BattleLogReader(start, x => lifecycle = x);
+        events.Line(" 1.00 STOR online_storage::load_locally: userid=42, store=ignored");
+        events.Line(" 2.00 [D]  AcesMpContext: AcesApp::onJoinMatch : sessionId:123456789abcdef");
+        events.Line(" 3.00" + Player("Pilot", 1, true, 392));
+        events.Line(" 3.10" + Spawn(392, -1)); // legitimate first spawn without a named base
+        events.Line(" 10.00" + Spawn(392, -1)); // restoration, no new life
+        events.Line(" 11.00" + Spawn(392, -1)); // repeated restoration
+        events.Line(" 20.00" + Player("Pilot", 1, true, 392)); // genuine new-life transition reusing the unit id
+        events.Line(" 20.10" + Spawn(392, -1));
+        events.Line(" 21.00" + Spawn(392, -1));
+        events.Line(" 30.00 [D]  AcesMission::endFinally 3 -1.000000");
+        check(lifecycle.spawns == 2 && lifecycle.spawnTypes.Values.Count(x => x == "repair") == 3,
+            "unbased initial and genuine new-life spawns count but repeated repairs do not");
+        events.Line(" 32.00 [D]  AcesMpContext: AcesApp::onJoinMatch : sessionId:ffffffff");
+        events.Line(" 33.00" + Player("Pilot", 1, true, 392).Replace("IN_RESPAWN->IN_FLIGHT", "IN_FLIGHT->IN_FLIGHT"));
+        events.Line(" 33.10" + Spawn(392, -1));
+        events.Line(" 34.00 [D]  AcesMission::endFinally 3 -1.000000");
+        check(lifecycle.spawns == null && lifecycle.spawnTypes.Count == 0,
+            "match boundaries clear life evidence and ambiguous resets do not become spawns");
+        var invalid = json.Deserialize<FileBattle>(json.Serialize(b));
+        invalid.spawnTypes[invalid.spawnEvents[0]] = "other";
+        check(!BattleFileStore.Valid(invalid), "unknown spawn classification is rejected");
+        invalid = json.Deserialize<FileBattle>(json.Serialize(b)); invalid.spawnTypes["1788868800000-999"] = "spawn";
+        check(!BattleFileStore.Valid(invalid), "spawn classification without its source event is rejected");
         b.spawnEvents = new[] { "not-an-event" }; check(!BattleFileStore.Valid(b), "invalid spawn evidence is rejected");
     }
 

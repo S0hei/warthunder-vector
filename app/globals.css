@@ -633,6 +633,7 @@ button:focus-visible { outline: 1px solid var(--signal); outline-offset: 0.125re
 .enemy-table .aircraft-flags { margin-top: .12rem; }
 .enemy-table .aircraft-flag { width: 1.125rem; height: .75rem; }
 .enemy-table .aircraft-title { color: var(--activity-ink); }
+.enemy-table .enemy-reported-loss :is(.enemy-name, .aircraft-title) { text-decoration-line: line-through; text-decoration-thickness: .09em; }
 .enemy-damage { display: block; color: var(--activity-muted); }
 .enemy-damage.critical_damage { color: var(--activity-ai); }
 .enemy-damage.severe_damage { color: #e4a36f; }

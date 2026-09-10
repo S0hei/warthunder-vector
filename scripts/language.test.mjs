@@ -40,6 +40,20 @@ test('Russian plurals, decimal separators and missing values retain the underlyi
   assert.equal(lang.localizedCount('en', 1, 'kill'), '1 kill');
 });
 
+test('combat terminology uses frags, deaths and spawns with correct Russian count forms', () => {
+  const forms = { kill: ['фраг', 'фрага', 'фрагов'], death: ['смерть', 'смерти', 'смертей'], spawn: ['спавн', 'спавна', 'спавнов'] };
+  for (const [key, words] of Object.entries(forms)) {
+    for (const [count, form] of [[0, 2], [1, 0], [2, 1], [5, 2], [11, 2], [12, 2], [21, 0], [22, 1], [25, 2], [111, 2]]) {
+      assert.equal(lang.localizedCount('ru', count, key), `${count} ${words[form]}`);
+    }
+    assert.equal(lang.localizedCount('ru', null, key), `Нет данных ${words[2]}`);
+  }
+  for (const key of ['Kills', 'AI kills', 'AI kills: air / ground / sea', 'Air / ground / sea kills']) assert.match(lang.translate('ru', key), /^Фраги/);
+  assert.equal(lang.translate('ru', 'Destroyed'), 'Фраг');
+  assert.equal(lang.translate('ru', 'Spawn point'), 'Точка спавна');
+  assert.equal(lang.translate('ru', 'Game connection lost'), 'Связь с игрой потеряна');
+});
+
 test('every translation preserves placeholders, avoids long dashes and is inert text', () => {
   const placeholders = text => [...text.matchAll(/\{([a-zA-Z][a-zA-Z0-9]*)\}/g)].map(m => m[1]).sort();
   assert.ok(Object.keys(ru).length > 300);
@@ -85,8 +99,11 @@ test('Russian Results, overview and Activity render translated labels while pres
   const props = { archive, account: '42', accounts: [['42', 'Pilot']], onAccountChange() {}, onHistory() {}, telemetryOnline: true };
   for (const file of ['file-battles-panel.tsx', 'session-overview.tsx']) {
     const html = renderToStaticMarkup(React.createElement(localized(file).default, props));
-    for (const text of ['Нет результата', 'Уничтожено', 'Опыт', 'G.55S', 'Королевство Италия']) assert.ok(html.includes(text), file + ': ' + text);
+    for (const text of ['Нет результата', 'Фраги', 'Смерти', 'Спавны', 'Фраги / Смерти', 'Фраги / Спавны', 'Опыт', 'G.55S', 'Королевство Италия']) assert.ok(html.includes(text), file + ': ' + text);
+    assert.doesNotMatch(html, /Уничтожено|Уничт\.|Потери|Возрождения|Возр\./);
+    assert.doesNotMatch(html, /Airfield repairs included|С учётом ремонта/);
     assert.doesNotMatch(html, />Battle earnings<|>Experience<|>Kills<|>No result</);
+    assert.doesNotMatch(html, /Статистика профиля|Подключить Chrome|Проверьте сайт|profile-summary|profile-settings/);
   }
   assert.equal(JSON.stringify(archive), original);
   const participants = [{ name: '<Enemy>{name}', vehicle: 'g_55s', team: 'enemy', observedAt: Date.parse(playedAt),

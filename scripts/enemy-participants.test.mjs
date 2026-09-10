@@ -66,6 +66,40 @@ test('a later shot down or crash is retained as a report, not a health estimate'
   assert.match(render(a.participants), /Crashed/);
 });
 
+test('reported losses cross the enemy identity, while damage and unknown reports do not', () => {
+  for (const action of ['shot_down', 'destroyed', 'crashed', 'critical_damage', 'severe_damage', null]) {
+    const participant = { name: 'Foe', vehicle: 'g_55s', team: 'enemy',
+      lastDamage: action ? { action, time: 10, recordId: 1, observedAt: 101000 } : null };
+    const html = render([participant]);
+    const lost = ['shot_down', 'destroyed', 'crashed'].includes(action);
+    assert.equal(html.includes('class="enemy-reported-loss"'), lost, action ?? 'unknown');
+    assert.match(html, /class="enemy-name">Foe<\/span>/);
+    assert.match(html, /G\.55S/);
+    assert.doesNotMatch(html, /aria-disabled|aria-hidden="true">Foe/);
+  }
+  const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
+  assert.match(css, /\.enemy-table \.enemy-reported-loss :is\(\.enemy-name, \.aircraft-title\) \{[^}]*text-decoration-line: line-through/);
+  assert.doesNotMatch(css, /\.enemy-reported-loss[^}]*\b(?:opacity|pointer-events):/);
+});
+
+test('enemy loss marking survives outgoing activity and delayed annotations, then clears for a different aircraft', () => {
+  const t = fixture(), down = event(1, 'Pilot (Yak) shot down Foe (g_55s)');
+  t.ingest(sample([down]), 101000);
+  let a = annotate(t, [annotation(down)]);
+  assert.match(render(a.participants), /class="enemy-reported-loss"/);
+  const outgoing = event(2, 'Foe (g_55s) destroyed ПВО');
+  t.ingest(sample([down, outgoing]), 102000);
+  a = annotate(t, [annotation(outgoing, 'enemy', 'unknown', 102000), annotation(down)]);
+  assert.match(render(a.participants), /class="enemy-reported-loss"/);
+  assert.match(render(a.participants, { selectedName: 'Foe' }), /class="enemy-reported-loss"/);
+  const changed = event(3, 'Foe (yak-3u) destroyed ПВО');
+  t.ingest(sample([down, outgoing, changed]), 103000);
+  a = annotate(t, [annotation(changed, 'enemy', 'unknown', 103000), annotation(down)]);
+  assert.doesNotMatch(render(a.participants), /class="enemy-reported-loss"/);
+  assert.match(render(a.participants), /Unknown/);
+  assert.doesNotMatch(render(t.ingest(sample([], 2), 104000).participants), /class="enemy-reported-loss"/);
+});
+
 test('delayed annotations recover damage for the same observed aircraft without changing the latest plane', () => {
   const t = fixture();
   const first = event(1, 'Foe (Yak) destroyed ПВО');

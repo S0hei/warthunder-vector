@@ -16,6 +16,12 @@ assert(/^[\w .-]+\.exe$/.test(exeName) && !exeName.includes('..'), 'Expected an 
 const exe = await readFile(new URL(exeName, root)), html = await readFile(new URL('Vector.html', root));
 assert(exe.includes(html), 'Executable embeds the current portable HTML');
 assert(exe.includes(await readFile(new URL('app/lib/translations/ru.json', root))), 'Executable embeds the current tray translations');
+for (const text of ['Microsoft.Web.WebView2', 'WebView2Loader', 'Vector.ProfileConnector.zip', 'ProfileStore', 'ProfileBrowserRuntime']) {
+  assert(!exe.includes(Buffer.from(text)) && !exe.includes(Buffer.from(text, 'utf16le')), `No retired profile dependency: ${text}`);
+}
+for (const text of ['Profile snapshots', '/api/profile', 'profile-connector', 'chrome://extensions', 'Статистика профиля']) {
+  assert(!html.includes(text), `No retired profile UI or polling: ${text}`);
+}
 for (const text of ['Русский', 'Результаты боёв', 'vector-language']) assert(html.includes(text), `Portable language support: ${text}`);
 for (const font of fonts) assert(html.includes((await readFile(new URL(`app/assets/fonts/${font.file}`, root))).toString('base64')));
 for (const text of ['Apache License', 'Last damage', 'Custom period', '/api/version']) assert(html.includes(text), text);

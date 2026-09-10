@@ -50,7 +50,7 @@ export default function SessionOverview({ archive, account, accounts, onAccountC
       <div><dt><BattleStatLabel kind="killDeath" /></dt><dd>{totals.kills > 0 && totals.deaths === 0 ? '∞' : number(totals.kd, 2)}</dd>
         <p>{countLabel(archive.startedAt === null ? null : totals.kills, 'kill')} <span>/</span> {countLabel(archive.startedAt === null ? null : totals.deaths, 'death')}</p><small>{t('Stats from {known}/{total} battles', { known: totals.scoreCount, total: totals.count })}</small></div>
       <div><dt><BattleStatLabel kind="killSpawn" /></dt><dd>{number(totals.ks, 2)}</dd>
-        <p>{countLabel(archive.startedAt === null ? null : totals.spawnKills, 'kill')} <span>/</span> {countLabel(archive.startedAt === null ? null : totals.spawns, 'spawn')}</p><small>{t('Airfield repairs included · {known}/{total} battles', { known: totals.spawnCount, total: totals.count })}</small></div>
+        <p>{countLabel(archive.startedAt === null ? null : totals.spawnKills, 'kill')} <span>/</span> {countLabel(archive.startedAt === null ? null : totals.spawns, 'spawn')}</p><small>{t('Stats from {known}/{total} battles', { known: totals.spawnCount, total: totals.count })}</small></div>
     </dl>
 
     <dl className="session-rewards">

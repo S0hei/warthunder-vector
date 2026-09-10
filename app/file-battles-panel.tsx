@@ -65,7 +65,7 @@ export default function FileBattlesPanel({ archive, account, accounts, onAccount
     </div>
     <dl className="results-totals results-ratios">
       <div><dt><BattleStatLabel kind="killDeath" /></dt><dd>{totals.deaths === 0 && totals.kills > 0 ? '∞' : number(totals.kd, 2)}</dd><small>{countLabel(totals.kills, 'kill')} · {countLabel(totals.deaths, 'death')}</small><small>{t('Stats from {known}/{total} battles', { known: totals.scoreCount, total: totals.count })}</small></div>
-      <div><dt><BattleStatLabel kind="killSpawn" /></dt><dd>{number(totals.ks, 2)}</dd><small>{countLabel(totals.spawnKills, 'kill')} · {countLabel(totals.spawns, 'spawn')}</small><small>{t('Airfield repairs included · {known}/{total} battles', { known: totals.spawnCount, total: totals.count })}</small></div>
+      <div><dt><BattleStatLabel kind="killSpawn" /></dt><dd>{number(totals.ks, 2)}</dd><small>{countLabel(totals.spawnKills, 'kill')} · {countLabel(totals.spawns, 'spawn')}</small><small>{t('Stats from {known}/{total} battles', { known: totals.spawnCount, total: totals.count })}</small></div>
     </dl>
     <dl className="results-rewards">
       <div><dt><RewardLabel kind="wp" /></dt><dd>{number(totals.wp)}</dd><small>{t('{battles} confirmed', { battles: countLabel(totals.wpCount, 'battle') })}</small></div>

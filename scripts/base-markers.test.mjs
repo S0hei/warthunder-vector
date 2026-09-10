@@ -49,7 +49,8 @@ test('bases bypass the gold diamond and letter glyph while retaining filters and
   assert.match(page, /base \? <BaseSymbol kind=\{base\}/);
   assert.match(page, /base base-\$\{team\}/);
   assert.match(page, /if \(!filters\[groupFor\(object\)\]\) return null/);
-  assert.match(page, /setSelectedIndex\(index\)/);
+  assert.match(page, /selectContact\(index, null\)/);
+  assert.match(page, /selection\.revision === mapRevision \? selection\.index : null/);
   assert.doesNotMatch(page, /if \(object\.type === '(?:bombing_point|defending_point)'\) return '[BD]'/);
 });
 

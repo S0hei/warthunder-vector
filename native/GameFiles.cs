@@ -20,9 +20,19 @@ namespace VectorPortable
         public long? wp, exp;
         public int? kills, groundKills, navalKills, aiKills, aiGroundKills, aiNavalKills, assists, deaths, score;
         public double? seconds;
-        // Stable source-event keys merge reconnects and rescans without estimating lives.
+        // Keep source events for legacy archive reconciliation; restorations are not lives.
         public string[] spawnEvents = new string[0];
-        public int? spawns { get { return spawnEvents.Length == 0 ? (int?)null : spawnEvents.Length; } }
+        public Dictionary<string, string> spawnTypes = new Dictionary<string, string>();
+        public int? spawns
+        {
+            get
+            {
+                // Old timestamps alone cannot distinguish repairs from actual spawns.
+                if (spawnEvents.Length == 0 || spawnEvents.Any(x => !spawnTypes.ContainsKey(x))) return null;
+                int count = spawnEvents.Count(x => spawnTypes[x] == "spawn");
+                return count == 0 ? (int?)null : count;
+            }
+        }
         public string[] vehicles = new string[0];
         public string Key { get { return accountId + "-" + id; } }
     }
@@ -49,6 +59,8 @@ namespace VectorPortable
             if ((b.player ?? "").Length > 128 || (b.mission ?? "").Length > 260 || b.vehicles == null || b.vehicles.Length > 32 || b.vehicles.Any(x => x == null || x.Length > 128)) return false;
             if (b.spawnEvents == null || b.spawnEvents.Length > 512 || b.spawnEvents.Distinct().Count() != b.spawnEvents.Length ||
                 b.spawnEvents.Any(x => !Regex.IsMatch(x ?? "", @"\A[0-9]{13}-[0-9]{1,10}\z"))) return false;
+            if (b.spawnTypes == null || b.spawnTypes.Count > 512 || b.spawnTypes.Any(x => !b.spawnEvents.Contains(x.Key) ||
+                (x.Value != "spawn" && x.Value != "repair"))) return false;
             if (new[] { b.kills, b.groundKills, b.navalKills, b.aiKills, b.aiGroundKills, b.aiNavalKills, b.assists, b.deaths, b.score }.Any(x => x.HasValue && (x < 0 || x > 10000000))) return false;
             if (new[] { b.wp, b.exp }.Any(x => x.HasValue && (x < -1000000000L || x > 1000000000L))) return false;
             return !b.seconds.HasValue || (!double.IsNaN(b.seconds.Value) && b.seconds >= 0 && b.seconds <= 86400);
@@ -63,7 +75,7 @@ namespace VectorPortable
                 if (!Regex.IsMatch(Path.GetFileName(file), @"\A[1-9][0-9]{0,19}-[a-f0-9]{8,32}\.json\z")) continue;
                 try
                 {
-                    if (new FileInfo(file).Length > 32768 || (File.GetAttributes(file) & FileAttributes.ReparsePoint) != 0) throw new InvalidDataException();
+                    if (new FileInfo(file).Length > 65536 || (File.GetAttributes(file) & FileAttributes.ReparsePoint) != 0) throw new InvalidDataException();
                     FileBattle b = json.Deserialize<FileBattle>(File.ReadAllText(file));
                     if (!Valid(b) || b.Key != Path.GetFileNameWithoutExtension(file)) throw new InvalidDataException();
                     records[b.Key] = b;
@@ -97,6 +109,11 @@ namespace VectorPortable
                     else { b.wp = b.wp ?? old.wp; b.exp = b.exp ?? old.exp; }
                     b.rewardsFinal |= old.rewardsFinal;
                     b.spawnEvents = old.spawnEvents.Concat(b.spawnEvents).Distinct().OrderBy(x => x).Take(512).ToArray();
+                    // Replay/legacy rescans cannot restore the former repair-inclusive count.
+                    // Positive spawn evidence wins if another connection only saw a restoration.
+                    foreach (var item in old.spawnTypes)
+                        if (!b.spawnTypes.ContainsKey(item.Key) || item.Value == "spawn") b.spawnTypes[item.Key] = item.Value;
+                    b.spawnTypes = b.spawnTypes.Where(x => b.spawnEvents.Contains(x.Key)).ToDictionary(x => x.Key, x => x.Value);
                     b.vehicles = old.vehicles.Concat(b.vehicles).Distinct().Take(32).ToArray();
                     b.hasLog |= old.hasLog; b.hasReplay |= old.hasReplay;
                     if (json.Serialize(old) == json.Serialize(b)) return;
@@ -118,6 +135,15 @@ namespace VectorPortable
 
         public void SetStatus(string value) { lock (gate) { status = value; scannedAt = DateTimeOffset.UtcNow.ToString("o"); } }
         public void SetPaused(bool value) { lock (gate) paused = value; }
+        internal bool NeedsSpawnEvidence(DateTimeOffset from, DateTimeOffset to)
+        {
+            var epoch = new DateTimeOffset(1970,1,1,0,0,0,TimeSpan.Zero);
+            long first = (long)(from.ToUniversalTime() - epoch).TotalMilliseconds;
+            long last = (long)(to.ToUniversalTime() - epoch).TotalMilliseconds;
+            lock (gate) return records.Values.Any(b => b.spawnEvents.Any(x => !b.spawnTypes.ContainsKey(x) &&
+                long.Parse(x.Substring(0, 13), CultureInfo.InvariantCulture) >= first &&
+                long.Parse(x.Substring(0, 13), CultureInfo.InvariantCulture) <= last));
+        }
         public string Snapshot()
         {
             lock (gate) return json.Serialize(new { schemaVersion = 1, startedAt, status, scannedAt, paused, unreadable,
@@ -138,6 +164,8 @@ namespace VectorPortable
         private FileBattle current, ended;
         private double endedTime = -10;
         private int ownUnit = -1;
+        private int pendingSpawnUnit = -1;
+        private readonly HashSet<int> seenSpawnUnits = new HashSet<int>();
         private readonly CombatTeamFeed teamFeed;
         private BattleTeamReader teamReader;
         public long Offset { get; private set; }
@@ -171,14 +199,15 @@ namespace VectorPortable
             double seconds;
             if (!stamp.Success || !double.TryParse(stamp.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out seconds) || seconds > 1209600) return;
             Match identity = Regex.Match(line, @"STOR online_storage::load_locally: userid=([1-9][0-9]{0,19}), store=");
-            if (identity.Success) { account = identity.Groups[1].Value; current = ended = null; teamReader = null; ownUnit = -1; return; }
+            if (identity.Success) { account = identity.Groups[1].Value; current = ended = null; teamReader = null; ownUnit = pendingSpawnUnit = -1; seenSpawnUnits.Clear(); return; }
             Match join = Regex.Match(line, @"AcesMpContext: AcesApp::onJoinMatch : sessionId:([0-9a-f]{8,32})\s*$");
             if (join.Success)
             {
                 ended = null;
                 current = account == null ? null : new FileBattle { accountId = account, id = join.Groups[1].Value,
                     playedAt = start.AddSeconds(seconds).ToUniversalTime().ToString("o"), hasLog = true };
-                ownUnit = -1;
+                ownUnit = pendingSpawnUnit = -1;
+                seenSpawnUnits.Clear();
                 teamReader = current == null || teamFeed == null ? null : new BattleTeamReader(current.id, start.AddSeconds(seconds), teamFeed);
                 return;
             }
@@ -187,14 +216,30 @@ namespace VectorPortable
             if (current != null)
             {
                 if (teamReader != null) teamReader.Line(line, start.AddSeconds(seconds));
-                Match own = Regex.Match(line, @"\[D\]\s+MPlayer::onStateChanged\(\) MULP pid:[0-9]+ n:'.{1,128}' [A-Z_]+->[A-Z_]+ t=[12] c=[0-9]+ f=[0-9a-f]+\(l=1\) mid=[0-9]+ uid=([0-9]+) eid:[0-9a-f]+ uid:(-?[0-9]+)/");
+                Match own = Regex.Match(line, @"\[D\]\s+MPlayer::onStateChanged\(\) MULP pid:[0-9]+ n:'.{1,128}' ([A-Z_]+)->([A-Z_]+) t=[12] c=[0-9]+ f=[0-9a-f]+\(l=1\) mid=[0-9]+ uid=([0-9]+) eid:[0-9a-f]+ uid:(-?[0-9]+)/");
                 int assignedUnit;
-                if (own.Success && own.Groups[1].Value == account && int.TryParse(own.Groups[2].Value, out assignedUnit)) ownUnit = assignedUnit;
-                Match spawn = Regex.Match(line, @"\[D\]\s+UnitRespawn received for uid:([0-9]{1,10}) \('([a-z0-9_-]{1,128})'\) ptr:[0-9A-Fa-f]+ \(spawnBase:-?[0-9]+");
+                if (own.Success && own.Groups[3].Value == account && int.TryParse(own.Groups[4].Value, out assignedUnit))
+                {
+                    ownUnit = assignedUnit;
+                    if (own.Groups[1].Value == "IN_RESPAWN" && own.Groups[2].Value == "IN_FLIGHT") pendingSpawnUnit = ownUnit;
+                    else if (own.Groups[2].Value != "IN_FLIGHT" || pendingSpawnUnit != ownUnit) pendingSpawnUnit = -1;
+                }
+                Match spawn = Regex.Match(line, @"\[D\]\s+UnitRespawn received for uid:([0-9]{1,10}) \('([a-z0-9_-]{1,128})'\) ptr:[0-9A-Fa-f]+ \(spawnBase:(-?[0-9]+)\s");
                 if (spawn.Success && spawn.Groups[1].Value == ownUnit.ToString(CultureInfo.InvariantCulture))
                 {
                     string key = ((long)(start.AddSeconds(seconds).ToUniversalTime() - new DateTimeOffset(1970,1,1,0,0,0,TimeSpan.Zero)).TotalMilliseconds).ToString(CultureInfo.InvariantCulture) + "-" + spawn.Groups[1].Value;
+                    bool duplicate = current.spawnEvents.Contains(key);
                     current.spawnEvents = current.spawnEvents.Concat(new[] { key }).Distinct().Take(512).ToArray();
+                    if (!duplicate && current.spawnEvents.Contains(key))
+                    {
+                        // An unbased reset of the same live unit is an airfield restoration.
+                        // Explicit new-life transitions still count, including an unbased spawn.
+                        if (!spawn.Groups[3].Value.StartsWith("-", StringComparison.Ordinal) || pendingSpawnUnit == ownUnit)
+                            current.spawnTypes[key] = "spawn";
+                        else if (spawn.Groups[3].Value == "-1" && seenSpawnUnits.Contains(ownUnit)) current.spawnTypes[key] = "repair";
+                        seenSpawnUnits.Add(ownUnit);
+                    }
+                    pendingSpawnUnit = -1;
                     current.vehicles = current.vehicles.Concat(new[] { spawn.Groups[2].Value }).Distinct().Take(32).ToArray();
                 }
             }
@@ -456,6 +501,11 @@ namespace VectorPortable
             lock (gate) { File.WriteAllText(settings, Path.GetFullPath(path)); root = Path.GetFullPath(path); logs.Clear(); replays.Clear(); }
         }
         public void Pause(bool value) { paused = value; store.SetPaused(value); }
+        internal static void PruneCache<T>(Dictionary<string, T> cache, IEnumerable<string> files)
+        {
+            var retained = new HashSet<string>(files, StringComparer.OrdinalIgnoreCase);
+            foreach (string key in cache.Keys.Where(key => !retained.Contains(key)).ToArray()) cache.Remove(key);
+        }
         private static bool Regular(string path) { return (File.GetAttributes(path) & FileAttributes.ReparsePoint) == 0; }
         private void Scan()
         {
@@ -467,7 +517,9 @@ namespace VectorPortable
                     if (root == null) root = Discover();
                     if (!IsGameFolder(root)) { store.SetStatus("game-not-found"); return; }
                     bool errors = false, behind = false;
-                    foreach (string file in Directory.EnumerateFiles(Path.Combine(root, "Replays"), "*.wrpl").OrderByDescending(File.GetLastWriteTimeUtc).Take(200))
+                    var replayFiles = Directory.EnumerateFiles(Path.Combine(root, "Replays"), "*.wrpl").OrderByDescending(File.GetLastWriteTimeUtc).Take(200).ToArray();
+                    PruneCache(replays, replayFiles);
+                    foreach (string file in replayFiles)
                     {
                         if (paused || stopped) return;
                         try
@@ -483,18 +535,25 @@ namespace VectorPortable
                         catch { errors = true; }
                     }
                     // Backfill recent logs, then tail them incrementally. Read no crash dumps or settings bodies.
-                    foreach (string file in Directory.EnumerateFiles(Path.Combine(root, ".game_logs"), "*.clog").OrderByDescending(File.GetLastWriteTimeUtc).Take(32))
+                    var logFiles = Directory.EnumerateFiles(Path.Combine(root, ".game_logs"), "*.clog").OrderByDescending(File.GetLastWriteTimeUtc).Take(32).ToArray();
+                    PruneCache(logs, logFiles);
+                    foreach (string file in logFiles)
                     {
                         if (paused || stopped) return;
                         try
                         {
                             var info = new FileInfo(file);
-                            if (!Regular(file) || info.LastWriteTimeUtc < DateTime.UtcNow.AddDays(-7)) continue;
+                            if (!Regular(file)) continue;
                             Match name = Regex.Match(info.Name, @"\A(\d{4}_\d{2}_\d{2}_\d{2}_\d{2}_\d{2})__\d+\.clog\z");
                             DateTime time;
                             if (!name.Success || !DateTime.TryParseExact(name.Groups[1].Value, "yyyy_MM_dd_HH_mm_ss", CultureInfo.InvariantCulture, DateTimeStyles.None, out time)) continue;
+                            // A migration may need an older retained log. Only read it when it
+                            // overlaps unclassified archive evidence; keep the normal 32-log cap.
+                            if (info.LastWriteTimeUtc < DateTime.UtcNow.AddDays(-7) && !logs.ContainsKey(file) &&
+                                !store.NeedsSpawnEvidence(new DateTimeOffset(time), new DateTimeOffset(info.LastWriteTimeUtc).AddSeconds(1))) continue;
                             BattleLogReader log;
                             if (!logs.TryGetValue(file, out log) || info.Length < log.Offset) logs[file] = log = new BattleLogReader(new DateTimeOffset(time), store.Upsert, teams);
+                            if (info.Length == log.Offset) continue;
                             using (var input = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
                             {
                                 input.Position = log.Offset; byte[] buffer = new byte[65536]; int n, budget = 16777216;

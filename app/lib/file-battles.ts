@@ -10,6 +10,16 @@ export type FileBattle = {
 const counters = ['kills', 'groundKills', 'navalKills', 'aiKills', 'aiGroundKills', 'aiNavalKills', 'assists', 'deaths', 'score'] as const;
 const numeric = (v: unknown, min: number, max: number) => v === null || (typeof v === 'number' && Number.isSafeInteger(v) && v >= min && v <= max);
 export const battleKey = (b: Pick<FileBattle, 'accountId' | 'id'>) => `${b.accountId}-${b.id}`;
+export function battleAccounts(battles: readonly FileBattle[]): [string, string][] {
+  const accounts = new Map<string, string>();
+  // Archives arrive newest first. An older nickname must not replace the current one.
+  for (const battle of battles) {
+    if (!accounts.has(battle.accountId) || (accounts.get(battle.accountId) === battle.accountId && battle.player)) {
+      accounts.set(battle.accountId, battle.player || battle.accountId);
+    }
+  }
+  return [...accounts];
+}
 export function decodeFileBattles(input: unknown): { battles: FileBattle[]; rejected: number } {
   if (!Array.isArray(input) || input.length > 5000) throw new Error('Invalid battle archive');
   const battles: FileBattle[] = [], seen = new Set<string>(); let rejected = 0;

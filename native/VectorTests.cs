@@ -80,6 +80,14 @@ internal static class VectorTests
                 Check(status == 403, "version endpoint rejects foreign origins");
                 Get(server.Origin + "/api/reports", token, server.Origin, out status, out etag);
                 Check(status == 404, "copied-report endpoint is removed");
+                foreach (string path in new[] { "/api/profile", "/api/profile-connector", "/downloads/vector-profile-connector.zip", "/licenses/webview2.txt" })
+                {
+                    Get(server.Origin + path, token, server.Origin, out status, out etag);
+                    Check(status == 404, "retired profile route is unavailable: " + path);
+                }
+                Get(server.Origin + "/api/battles", token, "chrome-extension://retired-connector", out status, out etag);
+                Check(status == 403, "browser extensions have no special access to local battle history");
+                Check(!html.Contains("Profile snapshots") && !html.Contains("profile-connector"), "portable Results UI has no profile setup or polling");
                 Get(server.Origin + "/Vector-data/reports/123456789abcdef.json", token, null, out status, out etag);
                 Check(status == 404, "no filesystem route");
                 Get(server.Origin + "/", null, "null", out status, out etag);
@@ -99,6 +107,16 @@ internal static class VectorTests
                 Check(status == 200 && teams.Contains("\"events\":[]"), "allowlisted combat annotations have a protected route");
             }
             GameFileTests.Run(Check, directory);
+            var cachedFiles = new System.Collections.Generic.Dictionary<string, int> { { "old.clog", 1 }, { "current.clog", 2 } };
+            GameFileCollector.PruneCache(cachedFiles, new[] { "CURRENT.clog" });
+            Check(cachedFiles.Count == 1 && cachedFiles["current.clog"] == 2, "collector drops obsolete cached readers without resetting current offsets");
+            GameFileCollector.PruneCache(cachedFiles, new string[0]);
+            Check(cachedFiles.Count == 0, "collector cache does not retain files outside the scan window");
+            var assembly = System.Reflection.Assembly.GetExecutingAssembly();
+            foreach (var reference in assembly.GetReferencedAssemblies())
+                Check(!reference.Name.Contains("WebView2"), "no embedded browser dependency: " + reference.Name);
+            foreach (string resource in assembly.GetManifestResourceNames())
+                Check(!resource.Contains("WebView2") && !resource.Contains("ProfileConnector"), "only local app assets are bundled: " + resource);
             LanguageTests.Run(Check, directory);
             UpdateTests.Run(Check, directory);
             Console.WriteLine(checks + " Windows checks passed.");

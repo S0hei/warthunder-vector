@@ -18,61 +18,13 @@ import { isGameSelectedTarget } from './lib/game-target';
 import { AIRCRAFT_MARKS, aircraftRole, aircraftRoleLabel } from './lib/aircraft-roles';
 import { airfieldBattleArea, fitMapArea, MIN_MAP_ZOOM, MAX_MAP_ZOOM } from './lib/map-fit';
 import type { AutoFitMode } from './lib/map-fit';
-
-const WT_ORIGIN = 'http://127.0.0.1:8111';
-const MAP_POLL_MS = 100;
-
-type MapObject = {
-  type: string;
-  color?: string;
-  blink?: number;
-  icon?: string;
-  icon_bg?: string;
-  x?: number;
-  y?: number;
-  dx?: number;
-  dy?: number;
-  sx?: number;
-  sy?: number;
-  ex?: number;
-  ey?: number;
-};
-
-type MapInfo = {
-  valid?: boolean;
-  map_generation?: number;
-  grid_size?: [number, number];
-  grid_steps?: [number, number];
-  grid_zero?: [number, number];
-  map_min?: [number, number];
-  map_max?: [number, number];
-  hud_type?: number;
-};
-
-type MissionObjective = {
-  primary?: boolean;
-  status?: string;
-  text?: string;
-};
-
-type Mission = {
-  status?: string;
-  objectives?: MissionObjective[];
-};
-
-type GameChatRecord = {
-  id: number;
-  msg: string;
-  sender?: string;
-  enemy?: boolean;
-  mode?: string;
-  time?: number;
-};
-
-type TeamMessage = GameChatRecord & {
-  receivedAt: number;
-  referenceTime: number;
-};
+import { WT_ORIGIN, readJson } from './lib/telemetry';
+import type { MapObject, MapInfo } from './lib/telemetry';
+import { useWarThunderFeed } from './use-war-thunder-feed';
+import type { TeamMessage } from './use-war-thunder-feed';
+import { battleAccounts } from './lib/file-battles';
+import MapImage from './map-image';
+import { ENEMY_MEMORY_MS, MAP_FRESH_MS, visibleEnemyTracks } from './lib/enemy-memory';
 
 type Filters = {
   air: boolean;
@@ -88,15 +40,6 @@ type EnemyTrack = {
   firstSeen: number;
   lastSeen: number;
   active: boolean;
-};
-
-const ENEMY_MEMORY_MS = 90_000;
-
-const defaultInfo: MapInfo = {
-  valid: false,
-  map_generation: 0,
-  grid_size: [65536, 65536],
-  grid_steps: [6500, 6500],
 };
 
 function clamp(value: number, min: number, max: number) {
@@ -248,109 +191,7 @@ function teamMessageAge(message: TeamMessage, now: number) {
   return Math.floor(ageAtReceipt + (now - message.receivedAt) / 1000);
 }
 
-async function readJson<T>(path: string): Promise<T> {
-  const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), 1400);
-  try {
-    const response = await fetch(`${WT_ORIGIN}${path}`, {
-      cache: 'no-store',
-      signal: controller.signal,
-    });
-    if (!response.ok) throw new Error(`Telemetry returned ${response.status}`);
-    return await response.json() as T;
-  } finally {
-    window.clearTimeout(timeout);
-  }
-}
-
-function useWarThunderFeed() {
-  const [objects, setObjects] = useState<MapObject[]>([]);
-  const [mapInfo, setMapInfo] = useState<MapInfo>(defaultInfo);
-  const [mapInfoUpdatedAt, setMapInfoUpdatedAt] = useState(0);
-  const [lastUpdate, setLastUpdate] = useState(0);
-  const [everConnected, setEverConnected] = useState(false);
-  const [trail, setTrail] = useState<Point[]>([]);
-  const [mission, setMission] = useState<Mission>({});
-  const [teamMessages, setTeamMessages] = useState<TeamMessage[]>([]);
-  const lastChatIdRef = useRef(0);
-  const mapGenerationRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    let stopped = false;
-    const timers: number[] = [];
-
-    const runLoop = (task: () => Promise<void>, delay: number) => {
-      const run = async () => {
-        await task().catch(() => undefined);
-        if (!stopped) timers.push(window.setTimeout(run, delay));
-      };
-      void run();
-    };
-
-    runLoop(async () => {
-      const nextObjects = await readJson<MapObject[]>('/map_obj.json');
-      if (stopped || !Array.isArray(nextObjects)) return;
-      setObjects(nextObjects);
-      const player = nextObjects.find(isPlayer);
-      if (player?.x != null && player.y != null) {
-        setTrail((previous) => {
-          const last = previous.at(-1);
-          if (last && Math.hypot(last.x - player.x!, last.y - player.y!) < 0.00045) return previous;
-          return [...previous, { x: player.x!, y: player.y! }].slice(-160);
-        });
-      }
-      setLastUpdate(Date.now());
-      setEverConnected(true);
-    }, MAP_POLL_MS);
-
-    runLoop(async () => {
-      const nextInfo = await readJson<MapInfo>('/map_info.json');
-      if (stopped || !nextInfo || typeof nextInfo.valid !== 'boolean') return;
-      const nextGeneration = nextInfo.map_generation ?? 0;
-      if (mapGenerationRef.current != null && mapGenerationRef.current !== nextGeneration) {
-        lastChatIdRef.current = 0;
-        setTeamMessages([]);
-        setMission({});
-        setTrail([]);
-      }
-      mapGenerationRef.current = nextGeneration;
-      setMapInfo(nextInfo);
-      setMapInfoUpdatedAt(Date.now());
-    }, 2500);
-
-    runLoop(async () => {
-      const nextMission = await readJson<Mission>('/mission.json');
-      if (stopped || typeof nextMission !== 'object' || nextMission == null) return;
-      setMission(nextMission);
-    }, 1000);
-
-    runLoop(async () => {
-      const records = await readJson<GameChatRecord[]>(`/gamechat?lastId=${lastChatIdRef.current}`);
-      if (stopped || !Array.isArray(records) || records.length === 0) return;
-      const validRecords = records.filter((record) => Number.isFinite(record.id) && typeof record.msg === 'string');
-      if (validRecords.length === 0) return;
-      lastChatIdRef.current = Math.max(lastChatIdRef.current, ...validRecords.map((record) => record.id));
-      const receivedAt = Date.now();
-      const referenceTime = Math.max(...validRecords.map((record) => record.time ?? 0));
-      const enriched = validRecords
-        .filter((record) => !record.enemy)
-        .map((record) => ({ ...record, receivedAt, referenceTime }));
-      setTeamMessages((previous) => {
-        const known = new Set(previous.map((record) => record.id));
-        return [...previous, ...enriched.filter((record) => !known.has(record.id))].slice(-30);
-      });
-    }, 750);
-
-    return () => {
-      stopped = true;
-      timers.forEach(window.clearTimeout);
-    };
-  }, []);
-
-  return { objects, mapInfo, mapInfoUpdatedAt, lastUpdate, everConnected, trail, mission, teamMessages };
-}
-
-function useEnemyMemory(objects: MapObject[], generation: number) {
+function useEnemyMemory(objects: MapObject[], generation: number, observedAt: number, now: number) {
   const [tracks, setTracks] = useState<EnemyTrack[]>([]);
   const sequenceRef = useRef(1);
   const generationRef = useRef(generation);
@@ -363,7 +204,7 @@ function useEnemyMemory(objects: MapObject[], generation: number) {
   }, [generation]);
 
   useEffect(() => {
-    const now = Date.now();
+    const now = observedAt;
     const currentEnemies = objects.filter((object) =>
       isEnemy(object) &&
       (object.type === 'aircraft' || object.type === 'ground_model') &&
@@ -409,13 +250,13 @@ function useEnemyMemory(objects: MapObject[], generation: number) {
 
       return [...activeTracks, ...rememberedTracks];
     });
-  }, [objects]);
+  }, [objects, observedAt]);
 
   const clearMemory = useCallback(() => {
-    setTracks((current) => current.filter((track) => track.active));
-  }, []);
+    setTracks((current) => visibleEnemyTracks(current, observedAt, now).filter((track) => track.active));
+  }, [observedAt, now]);
 
-  return { tracks, clearMemory };
+  return { tracks: visibleEnemyTracks(tracks, observedAt, now), clearMemory };
 }
 
 function TrailCanvas({ trail }: { trail: Point[] }) {
@@ -473,11 +314,11 @@ export default function Home() {
 function VectorApp() {
   const { t, number, notAvailable: unavailable } = useTranslation();
   useAppUpdates();
-  const { objects, mapInfo, mapInfoUpdatedAt, lastUpdate, everConnected, trail, mission, teamMessages } = useWarThunderFeed();
+  const { objects, mapInfo, mapInfoUpdatedAt, mapRevision, lastUpdate, everConnected, trail, mission, teamMessages } = useWarThunderFeed();
   const activity = useCombatActivity(readJson);
   const archive = useFileArchive();
   const [selectedAccount, setSelectedAccount] = useState('');
-  const accounts = useMemo(() => [...new Map(archive.battles.map(b => [b.accountId, b.player || b.accountId])).entries()], [archive.battles]);
+  const accounts = useMemo(() => battleAccounts(archive.battles), [archive.battles]);
   const account = accounts.some(([id]) => id === selectedAccount) ? selectedAccount : accounts[0]?.[0];
   const [intelTab, setIntelTab] = useState<'contacts' | 'activity' | 'results'>('contacts');
   const [clock, setClock] = useState(() => Date.now());
@@ -490,8 +331,10 @@ function VectorApp() {
     airfields: true,
     spawns: false,
   });
-  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
-  const [selectedTrackId, setSelectedTrackId] = useState<number | null>(null);
+  const [selection, setSelection] = useState<{ revision: number; index: number | null; track: number | null }>({ revision: mapRevision, index: null, track: null });
+  const selectedIndex = selection.revision === mapRevision ? selection.index : null;
+  const selectedTrackId = selection.revision === mapRevision ? selection.track : null;
+  const selectContact = useCallback((index: number | null, track: number | null) => setSelection({ revision: mapRevision, index, track }), [mapRevision]);
   const [showMemory, setShowMemory] = useState(true);
   const [highContrast, setHighContrast] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -505,7 +348,7 @@ function VectorApp() {
     return () => window.clearInterval(timer);
   }, []);
 
-  const connected = lastUpdate > 0 && clock - lastUpdate < 1800;
+  const connected = lastUpdate > 0 && clock - lastUpdate < MAP_FRESH_MS;
   const overview = showSessionOverview(mapInfo.valid, mapInfoUpdatedAt, lastUpdate, clock);
   useEffect(() => {
     // Releasing capture emits lostpointercapture, which ends the drag through
@@ -516,7 +359,7 @@ function VectorApp() {
   const player = useMemo(() => objects.find(isPlayer), [objects]);
   const selected = selectedIndex == null ? undefined : objects[selectedIndex];
   const generation = mapInfo.map_generation ?? 0;
-  const { tracks: enemyTracks, clearMemory } = useEnemyMemory(objects, generation);
+  const { tracks: enemyTracks, clearMemory } = useEnemyMemory(objects, mapRevision, lastUpdate, clock);
   const selectedTrack = selectedTrackId == null ? undefined : enemyTracks.find((track) => track.id === selectedTrackId);
   const selectedObject = selectedTrack?.object ?? selected;
   const mapImage = `${WT_ORIGIN}/map.img?generation=${generation}`;
@@ -658,13 +501,12 @@ function VectorApp() {
       if (event.key === '5') toggleFilter('spawns');
       if (event.key.toLowerCase() === 'm') setShowMemory((visible) => !visible);
       if (event.key === 'Escape') {
-        setSelectedIndex(null);
-        setSelectedTrackId(null);
+        selectContact(null, null);
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [centerPlayer, enableAutoFit, overview, setZoomSafe, toggleFilter, zoom]);
+  }, [centerPlayer, enableAutoFit, overview, selectContact, setZoomSafe, toggleFilter, zoom]);
 
   const onPointerDown = (event: React.PointerEvent<HTMLElement>) => {
     if ((event.target as HTMLElement).closest('button')) return;
@@ -720,13 +562,14 @@ function VectorApp() {
         <div className="map-ambient" style={{ backgroundImage: `url(${mapImage})` }} />
         <div className="map-pan-layer" style={{ transform: `translate3d(${pan.x}px, ${pan.y}px, 0)` }}>
           <div className="map-content" style={{ transform: `translate(-50%, -50%) scale(${zoom})` }}>
-            <img className="map-image" src={mapImage} alt={t("War Thunder tactical map")} draggable="false" />
+            <MapImage key={mapImage} source={mapImage} alt={t("War Thunder tactical map")} />
             <div className="map-tint" />
             <div className="grid-overlay" />
             <TrailCanvas trail={trail} />
 
             {objects.map((object, index) => {
               if (!filters[groupFor(object)]) return null;
+              if (!connected && isEnemy(object) && (object.type === 'aircraft' || object.type === 'ground_model')) return null;
               if (object.type === 'airfield') return <Runway key={`runway-${index}`} object={object} />;
               if (object.x == null || object.y == null) return null;
               const playerMarker = isPlayer(object);
@@ -747,8 +590,7 @@ function VectorApp() {
                   title={label}
                   onClick={(event) => {
                     event.stopPropagation();
-                    setSelectedIndex(index);
-                    setSelectedTrackId(null);
+                    selectContact(index, null);
                   }}
                 >
                   {object.type === 'aircraft'
@@ -774,8 +616,7 @@ function VectorApp() {
                   title={`E-${track.id.toString().padStart(2, '0')} · ${objectLabel(object, t)} · ${t('Last seen {seconds}s ago', { seconds: ageSeconds })}`}
                   onClick={(event) => {
                     event.stopPropagation();
-                    setSelectedTrackId(track.id);
-                    setSelectedIndex(null);
+                    selectContact(null, track.id);
                   }}
                 >
                   {object.type === 'aircraft'
@@ -824,7 +665,7 @@ function VectorApp() {
 
         {selectedObject && (
           <article className="selection-card">
-            <button aria-label={t("Close contact details")} onClick={() => { setSelectedIndex(null); setSelectedTrackId(null); }}>×</button>
+            <button aria-label={t("Close contact details")} onClick={() => { selectContact(null, null); }}>×</button>
             <p>{selectedTrack && !selectedTrack.active ? `${t('Last seen')} · ${actorLabel(selectedObject, t)}` : isEnemy(selectedObject) ? `${t('Enemy')} · ${actorLabel(selectedObject, t)}` : t('{kind} contact', { kind: actorLabel(selectedObject, t) })}</p>
             <strong>{selectedTrack ? `E-${selectedTrack.id.toString().padStart(2, '0')} · ` : ''}{objectLabel(selectedObject, t)}</strong>
             <div>
@@ -939,7 +780,7 @@ function VectorApp() {
           <div className="contact-log-heading">
             <div><span>{t("Enemy aircraft")}</span><small>{t('Last {seconds}s', { seconds: ENEMY_MEMORY_MS / 1000 })}</small></div>
             <button
-              onClick={() => { clearMemory(); setSelectedTrackId(null); }}
+              onClick={() => { clearMemory(); selectContact(selectedIndex, null); }}
               disabled={!contactRows.some((track) => !track.active)}
               title={t("Clear last known positions")}
             >{t("Clear old")}</button>
@@ -963,15 +804,13 @@ function VectorApp() {
                       role="button"
                       aria-label={t('Enemy track E-{id}, {status}', { id: track.id, status: track.active ? t('Live') : t('Last seen {seconds}s ago', { seconds: ageSeconds }) })}
                       onClick={() => {
-                        setSelectedTrackId(track.id);
-                        setSelectedIndex(null);
+                        selectContact(null, track.id);
                         focusObject(track.object);
                       }}
                       onKeyDown={(event) => {
                         if (event.key === 'Enter' || event.key === ' ') {
                           event.preventDefault();
-                          setSelectedTrackId(track.id);
-                          setSelectedIndex(null);
+                          selectContact(null, track.id);
                           focusObject(track.object);
                         }
                       }}

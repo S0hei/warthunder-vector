@@ -11,6 +11,7 @@ const damageLabels = {
 const damageIcons: Record<keyof typeof damageLabels, GameIconName> = {
   critical_damage: 'target', severe_damage: 'target', shot_down: 'airKills', destroyed: 'kills', crashed: 'deaths',
 };
+const reportedLosses = new Set(['shot_down', 'destroyed', 'crashed']);
 
 export default function EnemyParticipants({ participants = [], status, search, selectedName }: {
   participants: CombatParticipant[]; status: CombatActivity['status']; search: string; selectedName: string | null;
@@ -27,8 +28,8 @@ export default function EnemyParticipants({ participants = [], status, search, s
         <caption className="activity-sr-only">{t("Observed enemies, one row per exact nickname. Aircraft is the latest observed type. Damage is the last reported damage received, not current health. Unreported damage is unknown.")}</caption>
         <thead><tr><th scope="col">{t("Nickname")}</th><th scope="col"><GameLabel icon="spawns">{t("Aircraft")}</GameLabel></th><th scope="col"><GameLabel icon="target">{t("Last damage")}</GameLabel></th></tr></thead>
         <tbody>{rows.length === 0 && <tr><td colSpan={3} className="enemy-empty">{t(empty)}</td></tr>}
-          {rows.map(p => <tr key={p.name}>
-            <th scope="row" className="combat-enemy">{p.name}</th>
+          {rows.map(p => <tr key={p.name} className={p.lastDamage && reportedLosses.has(p.lastDamage.action) ? 'enemy-reported-loss' : undefined}>
+            <th scope="row" className="combat-enemy"><span className="enemy-name">{p.name}</span></th>
             <td title={t("Latest observed aircraft")}><AircraftNames vehicles={[p.vehicle]} /></td>
             <td><Damage participant={p} /></td>
           </tr>)}
