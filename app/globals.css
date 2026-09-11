@@ -195,9 +195,8 @@ button:focus-visible { outline: 1px solid var(--signal); outline-offset: 0.125re
   translate: -50% -50%;
 }
 .map-marker:hover, .map-marker.selected { z-index: 8; filter: drop-shadow(0 0 0.375rem currentColor); }
-.map-marker.player { width: 6rem; height: 1.75rem; color: var(--signal); }
-.map-marker.player::before { content: ''; position: absolute; width: 2.375rem; height: 2.375rem; border: 1px solid rgba(184, 239, 70, .56); border-radius: 50%; animation: radar-pulse 2.2s ease-out infinite; }
-.map-marker.player::after { content: ''; position: absolute; width: 0.25rem; height: 0.25rem; border-radius: 50%; background: var(--signal); box-shadow: 0 0 0.5rem var(--signal); }
+.map-marker.player::before { content: ''; position: absolute; width: 2.375rem; height: 2.375rem; border: 1px solid rgba(184, 239, 70, .56); border-radius: 50%; animation: radar-pulse 2.2s ease-out infinite; pointer-events: none; }
+.map-marker.player::after { content: ''; position: absolute; width: 0.25rem; height: 0.25rem; border-radius: 50%; background: var(--signal); box-shadow: 0 0 0.5rem var(--signal); pointer-events: none; }
 .map-marker.player .aircraft-symbol { z-index: 2; }
 .map-marker small { position: absolute; top: 2.5625rem; width: 7rem; text-align: center; color: #b4beb1; font-size: 0.75rem; letter-spacing: .06em; }
 .map-marker.hostile { color: var(--hostile); }
@@ -230,6 +229,8 @@ button:focus-visible { outline: 1px solid var(--signal); outline-offset: 0.125re
 .map-marker.memory.ground-contact { color: var(--ground-enemy); }
 .map-marker.blinking { animation: contact-blink 1.25s ease-in-out infinite; }
 .map-marker.game-target { z-index: 9; animation: none; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .7)); }
+/* Keep the own aircraft above contacts and target highlights, below map controls. */
+.map-marker.player { z-index: 10; width: 1.1875rem; height: 1.75rem; color: var(--signal); }
 .game-target-reticle {
   position: absolute;
   left: 50%;
