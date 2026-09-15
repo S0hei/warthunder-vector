@@ -197,6 +197,7 @@ internal static class GameFileTests
 
     private static void TeamTests(Action<bool, string> check)
     {
+        LiveRosterTests(check);
         var feed = new CombatTeamFeed(); var start = DateTimeOffset.UtcNow;
         var reader = new BattleTeamReader("123456789abcdef", start, feed);
         reader.Line(Player("Pilot", 2, true, 392), start);
@@ -223,6 +224,44 @@ internal static class GameFileTests
         nested.Line(Player("Foe", 1, false, 401), start);
         nested.Line("4.00 HUD  hud_mp_ui_message - text = 'tdp\u001b012Pilot (Ace) (Yak)\u001b \u001b019сбил\u001b \u001b009=TAG= Foe (Су-6 (АМ-42))\u001b'", start.AddSeconds(4));
         check(nestedFeed.Snapshot().Contains("\"actorTeam\":\"self\"") && nestedFeed.Snapshot().Contains("\"targetInRoster\":true"), "nested aircraft variants and pilot parentheses keep exact roster identities");
+    }
+    private static void LiveRosterTests(Action<bool, string> check)
+    {
+        var feed = new CombatTeamFeed(); var start = DateTimeOffset.UtcNow;
+        var reader = new BattleTeamReader("12345678", start, feed);
+        var json = new JavaScriptSerializer();
+        Func<Dictionary<string, object>> summary = () => (Dictionary<string, object>)json.Deserialize<Dictionary<string, object>>(feed.Snapshot())["summary"];
+        reader.Publish();
+        check(summary()["alliesAlive"] == null && summary()["enemiesAlive"] == null, "missing roster is unavailable rather than zero players");
+        reader.Line(Player("Pilot", 2, true, 392), start);
+        reader.Line(Player("Friend", 2, false, 400), start);
+        reader.Line(Player("Foe", 1, false, 401).Replace("uid=43", "uid=44"), start);
+        reader.Line(Player("Bot", 1, false, 402).Replace("uid=43", "uid=0"), start);
+        reader.Line(Player("Bot negative", 1, false, 403).Replace("uid=43", "uid=-1"), start);
+        reader.Line(Player("[AI] Bot", 1, false, 404).Replace("uid=43", "uid=45"), start);
+        check((int)summary()["alliesAlive"] == 2 && (int)summary()["enemiesAlive"] == 1, "alive counts include own player and account-backed roster, not AI entries");
+        reader.Line("1.00 HUD  hud_mp_ui_message - text = 'tdp\u001b012Pilot (Yak)\u001b \u001b019нанёс критическое повреждение\u001b \u001b009Foe (Bf 109)\u001b'", start.AddSeconds(1));
+        check((int)summary()["enemiesAlive"] == 1, "critical damage does not remove a live player");
+        string death = "2.00 HUD  hud_mp_ui_message - text = 'tdp\u001b012Pilot (Yak)\u001b \u001b019сбил\u001b \u001b009Foe (Bf 109)\u001b'";
+        reader.Line(death, start.AddSeconds(2)); reader.Line(death, start.AddSeconds(2));
+        check((int)summary()["enemiesAlive"] == 0, "shot-down players are removed immediately, duplicate deaths do not subtract twice");
+        reader.Line(Player("Foe", 1, false, 401).Replace("uid=43", "uid=44").Replace("IN_RESPAWN->", "IN_FLIGHT->"), start.AddSeconds(3));
+        check((int)summary()["enemiesAlive"] == 0, "unchanged flight state cannot resurrect a destroyed aircraft");
+        reader.Line(Player("Foe", 1, false, 405).Replace("uid=43", "uid=44"), start.AddSeconds(4));
+        check((int)summary()["enemiesAlive"] == 1, "an explicit respawn brings the player back into the live count");
+        reader.Line(Player("Friend", 2, false, 400).Replace("IN_RESPAWN->IN_FLIGHT", "IN_FLIGHT->HAS_LEAVED_GAME"), start.AddSeconds(5));
+        check((int)summary()["alliesAlive"] == 1, "leaving the match removes the player from the live count");
+        reader.Line("6.00 HUD  hud_mp_ui_message - text = 'tdp\u001b012Pilot (Yak)\u001b crashed'", start.AddSeconds(6));
+        check((int)summary()["alliesAlive"] == 0, "a logged crash removes the own player without guessing the opposing side");
+        reader.Scanned();
+        check(json.Deserialize<Dictionary<string, object>>(feed.Snapshot())["scannedAt"] != null, "successful active log reads provide freshness independent from replay errors");
+        reader.End(); check(!(bool)summary()["active"], "leaving a mission deactivates the live summary");
+        var newer = new BattleTeamReader("abcdefab", start.AddMinutes(5), feed); newer.Publish();
+        check(json.Deserialize<Dictionary<string, object>>(feed.Snapshot())["scannedAt"] == null, "a new battle requires its own successful log scan");
+        string current = feed.Snapshot(); reader.Scanned(); reader.Publish();
+        check(feed.Snapshot() == current, "old readers cannot refresh or overwrite a newer battle summary");
+        var keys = summary().Keys.OrderBy(k => k).ToArray();
+        check(string.Join(",", keys) == "active,alliesAlive,enemiesAlive,joinedAt", "live summary exports counts and timing only, not the player roster or account IDs");
     }
 }
 

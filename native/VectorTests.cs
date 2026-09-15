@@ -60,18 +60,24 @@ internal static class VectorTests
             using (var icon = System.Drawing.Icon.ExtractAssociatedIcon(System.Reflection.Assembly.GetExecutingAssembly().Location))
             using (var bitmap = icon.ToBitmap())
             {
-                bool lime = false;
+                bool red = false, silver = false;
                 for (int y = 0; y < bitmap.Height; y++)
                     for (int x = 0; x < bitmap.Width; x++)
-                    { var pixel = bitmap.GetPixel(x, y); if (pixel.A > 200 && pixel.R > 130 && pixel.G > 190 && pixel.B < 120) lime = true; }
-                Check(lime, "Windows executable exposes the Vector icon");
+                    {
+                        var pixel = bitmap.GetPixel(x, y);
+                        if (pixel.A > 200 && pixel.R > 120 && pixel.R > pixel.G * 1.5 && pixel.R > pixel.B * 1.5) red = true;
+                        if (pixel.A > 200 && Math.Min(pixel.R, Math.Min(pixel.G, pixel.B)) > 140) silver = true;
+                    }
+                Check(red && silver, "Windows executable exposes the silver and red Vector emblem");
             }
             using (var server = new LocalServer(new BattleFileStore(Path.Combine(directory, "api-battles")), 0))
             {
                 int status; string etag;
                 string html = Get(server.Origin + "/", null, null, out status, out etag);
                 Check(status == 200 && html.Contains("<style>") && html.Contains("type=\"module\""), "embedded portable UI served");
+                Check(html.Contains("app-update-notice") && html.Contains("/api/updates/restart"), "portable UI embeds the update popup and restart action");
                 Check(html.Contains("rel=\"icon\"") && html.Contains("data:image/svg+xml;base64,"), "browser icon embedded without an external file");
+                Check(html.Contains("vector-mark") && html.Contains("data-control-icon") && html.Contains("fitAircraft") && html.Contains("fitBattle"), "portable UI embeds the new brand and control icons");
                 string token = Regex.Match(html, "token:'([a-f0-9]{64})'").Groups[1].Value;
                 Check(token.Length == 64, "per-launch authentication bootstrap");
                 string appVersion = Get(server.Origin + "/api/version", null, server.Origin, out status, out etag);

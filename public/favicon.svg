@@ -1,4 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none">
-  <rect x="2" y="2" width="60" height="60" rx="14" fill="#101311" stroke="#354235" stroke-width="2" />
-  <path d="M14 17H24L32 38L40 17H50L37 48H27L14 17Z" fill="#b8ef46" />
+  <defs>
+    <linearGradient id="plate" x1="12" y1="2" x2="52" y2="62" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#31424a" />
+      <stop offset="1" stop-color="#13191b" />
+    </linearGradient>
+    <linearGradient id="steel" x1="32" y1="20" x2="32" y2="53" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f5f7f8" />
+      <stop offset=".48" stop-color="#cfd8dc" />
+      <stop offset="1" stop-color="#8a9da6" />
+    </linearGradient>
+  </defs>
+  <path d="M12 2H52L62 12V52L52 62H12L2 52V12Z" fill="url(#plate)" stroke="#546e7a" stroke-width="2" />
+  <path d="M12 3H52L61 12" stroke="#8a9da6" stroke-width="1.5" />
+  <path d="M9 20H20L32 41L44 20H55L37 53H27Z" fill="url(#steel)" />
+  <path d="M9 20H20L32 41L44 20H55" stroke="#fff" stroke-width="1" />
+  <path d="M32 8L40 25L34 22V34H30V22L24 25Z" fill="#e53935" />
+  <path d="M32 8V21L24 25Z" fill="#ff6b55" />
 </svg>

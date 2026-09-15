@@ -14,7 +14,7 @@ Outside battle, the map area becomes a **Session overview**: confirmed win rate,
 
 ## Automatic updates
 
-Vector.exe checks for a new stable release at launch and every hour while it runs. It downloads verified updates in the background, then restarts outside battle. The existing browser tab refreshes automatically. The tray menu shows the installed version and update status and includes **Check for app updates**.
+Vector.exe checks for a new stable release at launch and every hour while it runs. It downloads verified updates in the background, then shows a popup with **Restart Vector** and **Later**. Installation requires your click and waits for a safe game state. If a restart is blocked during battle, return to the hangar and click again. The existing browser tab refreshes automatically. The tray menu shows the installed version and update status and includes **Check for app updates**.
 
 Updates replace only the executable, preserving **Vector-data** and your saved battle history. A failed startup triggers rollback to the previous executable. A normal update restart clears temporary Activity observations and begins a new session window. Network failures leave the current version usable and retry later. See [update behavior and safeguards](docs/app-updates.md).
 
@@ -46,7 +46,7 @@ Run `pnpm build:portable` on Windows to create **Vector.exe** and **Vector.html*
 
 The tray icon offers Open, Pause/Resume collection, Choose War Thunder folder, app update status/checks, and Exit. Steam installations are detected automatically; use the folder picker if discovery fails. Closing the browser does not stop collection or hourly update checks; use **Exit Vector** in the tray to stop it. Launching the executable again reopens the existing app. The map still reads the game directly from `127.0.0.1:8111`.
 
-Vector's lime **V** icon is embedded in the Windows executable and tray, with 16–256px sizes for different display scales. The same icon appears in browser tabs, including the standalone HTML file. No separate icon file is needed when moving the app. The editable source is `public/favicon.svg`; `public/vector.ico` is the generated Windows asset, rebuilt with `node scripts/build-icon.mjs` when Sharp is available (or pass an absolute Sharp module path).
+Vector's original winged **V** emblem uses gunmetal, silver and red to match the War Thunder-inspired interface. It is embedded in the Windows executable and tray, with 16 to 256px sizes for different display scales. The same artwork appears in browser tabs and the sidebar, including the standalone HTML file. No separate icon file is needed when moving the app. The editable source is `public/favicon.svg`; `public/vector.ico` and `app/lib/vector-brand.json` are generated with `node scripts/build-icon.mjs` when Sharp is available (or pass an absolute Sharp module path). Control buttons use local angular SVG symbols instead of font-dependent glyphs; map markers and original in-game statistics icons are unchanged. This is Vector's own emblem, not the official War Thunder logo.
 
 Automatic history is saved beside the executable in **Vector-data/battles**. Copy **Vector-data** as well to move your history to another PC. Updating/replacing Vector.exe leaves that folder intact. Each changed record keeps one previous revision as a backup. Automatic history separates account IDs. Legacy copied-report files are left untouched, but are no longer read or used.
 
@@ -56,8 +56,8 @@ Automatic history is saved beside the executable in **Vector-data/battles**. Cop
 
 ## Controls
 
-- Vector initially fits the view around active air contacts. Press `0` or the ⤢ button to resume aircraft-based auto-fit.
-- Press `B` or the **B** map button for **battle-area auto-fit**: it frames all reported friendly/enemy runway endpoints and the area between them, with 10% padding on each side (at least 2.5% of the map per axis). It adapts to airfield changes, new maps and window resizing, independently of aircraft positions and layer visibility. If no valid runway geometry is available, it shows the whole map until airfields arrive.
+- Vector initially fits the view around active air contacts. Press `0` or the framed-aircraft button to resume aircraft-based auto-fit.
+- Press `B` or the paired-runway button for **battle-area auto-fit**: it frames all reported friendly/enemy runway endpoints and the area between them, with 10% padding on each side (at least 2.5% of the map per axis). It adapts to airfield changes, new maps and window resizing, independently of aircraft positions and layer visibility. If no valid runway geometry is available, it shows the whole map until airfields arrive.
 - Drag to pan, use the mouse wheel or `+` / `−` to zoom. Manual map movement pauses auto-fit.
 - Press `C` or double-click to center your aircraft.
 - Press `1` through `5` to toggle air contacts, ground units, objectives, airfields, and spawn points. Airfields are visible by default; spawn points are hidden until enabled.

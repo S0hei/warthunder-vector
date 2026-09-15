@@ -15,9 +15,14 @@ and Vector product metadata must all agree. This trusts the repository and
 GitHub HTTPS; it is not Authenticode signing or protection against compromise
 of the release publisher. No SSH key or GitHub token is embedded in the app.
 
-The complete download is staged in Vector-data/updates. Installation waits for
-an explicit out-of-battle map response, or a refused local feed with no running
-aces game process. Timeouts, invalid responses and active battle maps defer it.
+The complete, verified download is staged in Vector-data/updates. The interface
+shows an English/Russian popup with **Restart Vector** and **Later**. Dismissing
+it leaves a small update button; it never authorizes an automatic restart.
+Installation requires an explicit click, then an out-of-battle map response or
+a refused local feed with no running aces game process. Windows has up to five
+seconds to report a refused connection. Timeouts, invalid responses and active
+battle maps reject the restart request with a visible message. The user must
+click again after returning to the hangar; the app does not silently restart later.
 No process memory is read. The replacement is checked again immediately before
 installation. App folders containing filesystem links are refused.
 
@@ -31,13 +36,28 @@ initialization within 20 seconds. If startup fails, only that updater-launched
 replacement child may be terminated, the old executable is restored, and that
 release digest is suppressed until a manual retry or a different release.
 
-The existing browser tab checks the local app instance every 15 seconds and
-reloads after a restart, refreshing its per-launch access token. It does not
+The existing browser tab checks the local app instance and update state every
+three seconds and reloads after a restart, refreshing its per-launch access token.
+Older native versions retain the 15-second instance check. It does not
 poll GitHub. Like a normal app restart, the temporary Activity table and
 session start time reset; saved battle history stays intact. Previous.exe and
 failed.exe are retained for recovery. No administrator elevation is attempted;
 if the executable is locked, its folder is not writable, or atomic replacement
-is unsupported, the existing version is kept. The tray reports the failure.
+is unsupported, the existing version is kept. The tray and popup report failure.
+A rollback marker for a newer version is shown after the old app restarts. If
+the browser cannot reconnect within 90 seconds, it asks the user to reopen Vector
+instead of displaying an endless progress state.
+
+The read-only GET /api/updates and bodyless POST /api/updates/restart require the
+per-launch token. Restart additionally requires the exact local Origin; GET,
+cross-origin requests and arbitrary request bodies cannot start an installer.
+POST queues a single handoff and returns before the native app exits. Duplicate
+requests from multiple tabs are rejected. No executable paths or release URLs
+are accepted from the browser or exposed in the update status.
+
+This interface is included from 0.3.4. If an older updater cannot install that
+version, replace Vector.exe manually once with Vector fully closed, preserving
+Vector-data. A popup does not bypass checksum verification or startup rollback.
 
 ## Publishing
 

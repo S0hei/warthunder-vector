@@ -6,6 +6,10 @@ import FileBattlesPanel from './file-battles-panel';
 import SessionOverview from './session-overview';
 import { useFileArchive } from './use-file-archive';
 import { useAppUpdates } from './use-app-updates';
+import AppUpdateNotice from './app-update-notice';
+import BattleStatusStrip from './battle-status-strip';
+import VectorMark from './vector-mark';
+import ControlIcon from './control-icon';
 import { LanguageProvider, LanguageSelector, useTranslation } from './language-provider';
 import { showSessionOverview } from './lib/session-overview';
 import AircraftSymbol from './aircraft-symbol';
@@ -313,7 +317,7 @@ export default function Home() {
 
 function VectorApp() {
   const { t, number, notAvailable: unavailable } = useTranslation();
-  useAppUpdates();
+  const appUpdates = useAppUpdates();
   const { objects, mapInfo, mapInfoUpdatedAt, mapRevision, lastUpdate, everConnected, trail, mission, teamMessages } = useWarThunderFeed();
   const activity = useCombatActivity(readJson);
   const archive = useFileArchive();
@@ -535,10 +539,11 @@ function VectorApp() {
 
   return (
     <main className={`tactical-shell ${highContrast ? 'high-contrast' : ''} ${overview ? 'session-mode' : ''}`}>
+      <AppUpdateNotice {...appUpdates} />
       <aside className="brand-rail" aria-label={t("Vector controls")}>
-        <div className="brand-mark" aria-label={t("Vector tactical map")}>V</div>
-        {!overview && <button className="rail-button" aria-label={t("Toggle map contrast")} title={t("Toggle map contrast")} onClick={() => setHighContrast((active) => !active)}>◐</button>}
-        <button className="rail-button" aria-label={t("Open full screen")} title={t("Full screen (F)")} onClick={() => void document.documentElement.requestFullscreen?.()}>⛶</button>
+        <div className="brand-mark" role="img" aria-label={t("Vector tactical map")}><VectorMark /></div>
+        {!overview && <button className="rail-button" aria-label={t("Toggle map contrast")} title={t("Toggle map contrast")} onClick={() => setHighContrast((active) => !active)}><ControlIcon name="contrast" /></button>}
+        <button className="rail-button" aria-label={t("Open full screen")} title={t("Full screen (F)")} onClick={() => void document.documentElement.requestFullscreen?.()}><ControlIcon name="fullscreen" /></button>
       </aside>
 
       <section
@@ -651,6 +656,7 @@ function VectorApp() {
             <p className="eyebrow">{t("Vector / Live map")}</p>
             <h1>{t("Current battle")}</h1>
           </div>
+          <BattleStatusStrip battle={activity.battle} connected={connected} now={clock} />
           <div className={`connection-pill ${connected ? '' : 'offline'}`}>
             <span /> {connected ? t("Live") : t("Game disconnected")}
           </div>
@@ -665,7 +671,7 @@ function VectorApp() {
 
         {selectedObject && (
           <article className="selection-card">
-            <button aria-label={t("Close contact details")} onClick={() => { selectContact(null, null); }}>×</button>
+            <button aria-label={t("Close contact details")} onClick={() => { selectContact(null, null); }}><ControlIcon name="close" /></button>
             <p>{selectedTrack && !selectedTrack.active ? `${t('Last seen')} · ${actorLabel(selectedObject, t)}` : isEnemy(selectedObject) ? `${t('Enemy')} · ${actorLabel(selectedObject, t)}` : t('{kind} contact', { kind: actorLabel(selectedObject, t) })}</p>
             <strong>{selectedTrack ? `E-${selectedTrack.id.toString().padStart(2, '0')} · ` : ''}{objectLabel(selectedObject, t)}</strong>
             <div>
@@ -678,11 +684,11 @@ function VectorApp() {
         )}
 
         <div className="map-tools" aria-label={t("Map controls")}>
-          <button aria-label={t("Zoom in")} title={t("Zoom in (+)")} onClick={() => setZoomSafe(zoom + 0.25)}>+</button>
-          <button aria-label={t("Zoom out")} title={t("Zoom out (−)")} onClick={() => setZoomSafe(zoom - 0.25)}>−</button>
-          <button className={autoFit === 'air' ? 'active' : ''} aria-pressed={autoFit === 'air'} aria-label={t("Fit map to aircraft")} title={t("Fit map to aircraft (0)")} onClick={() => enableAutoFit('air')}>⤢</button>
-          <button className={autoFit === 'battle' ? 'active' : ''} aria-pressed={autoFit === 'battle'} aria-label={t("Fit map between airfields")} title={t("Fit map between airfields (B)")} onClick={() => enableAutoFit('battle')}>B</button>
-          <button aria-label={t("Center on your aircraft")} title={t("Center on your aircraft (C)")} onClick={centerPlayer}>⌖</button>
+          <button aria-label={t("Zoom in")} title={t("Zoom in (+)")} onClick={() => setZoomSafe(zoom + 0.25)}><ControlIcon name="zoomIn" /></button>
+          <button aria-label={t("Zoom out")} title={t("Zoom out (−)")} onClick={() => setZoomSafe(zoom - 0.25)}><ControlIcon name="zoomOut" /></button>
+          <button className={autoFit === 'air' ? 'active' : ''} aria-pressed={autoFit === 'air'} aria-label={t("Fit map to aircraft")} title={t("Fit map to aircraft (0)")} onClick={() => enableAutoFit('air')}><ControlIcon name="fitAircraft" /></button>
+          <button className={autoFit === 'battle' ? 'active' : ''} aria-pressed={autoFit === 'battle'} aria-label={t("Fit map between airfields")} title={t("Fit map between airfields (B)")} onClick={() => enableAutoFit('battle')}><ControlIcon name="fitBattle" /></button>
+          <button aria-label={t("Center on your aircraft")} title={t("Center on your aircraft (C)")} onClick={centerPlayer}><ControlIcon name="center" /></button>
         </div>
 
         <div className="filter-bar" aria-label={t("Map layers")}>
@@ -838,7 +844,9 @@ function VectorApp() {
           <FileBattlesPanel archive={archive} account={account} accounts={accounts} onAccountChange={setSelectedAccount} />
         </div>
 
-        <footer className="panel-footer"><span>{t("WT :8111")}</span><span>{t("Local / Read-only")}</span></footer>
+        <footer className="panel-footer"><span>{t("WT :8111")}</span><span>{t("Local / Read-only")}</span>
+          <a className="github-download" href="https://github.com/S0hei/warthunder-vector/releases/latest" target="_blank" rel="noopener noreferrer">{t('Download on GitHub')} <ControlIcon name="external" /></a>
+        </footer>
       </aside>
     </main>
   );

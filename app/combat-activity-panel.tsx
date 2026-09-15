@@ -8,16 +8,19 @@ import { vectorEndpoint } from './lib/vector-bridge';
 import { activityEventMatches } from './lib/activity-search';
 import ActivityPlayerPicker from './activity-player-picker';
 import EnemyParticipants from './enemy-participants';
+import { LiveBattleTracker } from './lib/live-battle';
+import type { LiveBattleStatus } from './lib/live-battle';
 import { GameLabel } from './game-icon';
 import type { GameIconName } from './game-icon';
 
 type ReadTelemetry = (path: string) => Promise<unknown>;
 
 export function useCombatActivity(readTelemetry: ReadTelemetry) {
-  const [activity, setActivity] = useState<CombatActivity>(emptyCombatActivity);
+  const [activity, setActivity] = useState<CombatActivity & { battle: LiveBattleStatus | null }>(() => ({ ...emptyCombatActivity(), battle: null }));
 
   useEffect(() => {
     const tracker = new CombatActivityTracker();
+    const battle = new LiveBattleTracker();
     const endpoint = vectorEndpoint('activity-teams');
     let stopped = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -30,15 +33,18 @@ export function useCombatActivity(readTelemetry: ReadTelemetry) {
         if (stopped) return;
         const after = await readTelemetry('/map_info.json');
         if (stopped) return;
-        setActivity(tracker.ingest({ before, hud, after }, Date.now()));
+        let next = tracker.ingest({ before, hud, after }, Date.now());
+        battle.observe(before, hud, after);
         if (endpoint) {
           try {
             const response = await fetch(endpoint.url, { headers: endpoint.headers, credentials: 'omit', cache: 'no-store', signal: AbortSignal.timeout(1500) });
-            if (response.ok) { const teams = await response.json(); if (!stopped) setActivity(tracker.annotate(teams)); }
+            if (response.ok) { const teams = await response.json(); if (!stopped) { next = tracker.annotate(teams); battle.annotate(teams, Date.now()); } }
           } catch { /* Optional annotations must never interrupt the live HUD feed. */ }
         }
+        if (!stopped) setActivity({ ...next, battle: battle.snapshot(Date.now()) });
       } catch {
-        if (!stopped) setActivity(tracker.disconnected());
+        battle.disconnected();
+        if (!stopped) setActivity({ ...tracker.disconnected(), battle: null });
       } finally {
         if (!stopped) timer = setTimeout(poll, 1000);
       }

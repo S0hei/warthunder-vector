@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Net;
+using System.Net.Sockets;
 using System.Reflection;
 using System.Text;
 using System.Threading;
@@ -31,6 +33,8 @@ internal static class UpdateTests
     }
     public static void Run(Action<bool, string> check, string directory)
     {
+        UpdateInterface(check, directory);
+        BattleReadiness(check);
         var json = new JavaScriptSerializer();
         check(UpdateSource.Parse(json.Serialize(Release("0.10.0")), "0.2.0").Version == "0.10.0", "update versions compare numerically");
         check(UpdateSource.Parse(json.Serialize(Release("0.2.0")), "0.2.0") == null && UpdateSource.Parse(json.Serialize(Release("0.1.9")), "0.2.0") == null, "same versions and downgrades are ignored");
@@ -73,6 +77,116 @@ internal static class UpdateTests
         {
             try { using (var process = Process.GetProcessById(int.Parse(File.ReadAllText(file)))) check(process.WaitForExit(5000), "update fixture child exits cleanly"); }
             catch (ArgumentException) { }
+        }
+    }
+    private static string UpdateRequest(string url, string token, string origin, string method, out int status, string body = null)
+    {
+        var request = (HttpWebRequest)WebRequest.Create(url); request.Proxy = null; request.Timeout = 5000; request.Method = method;
+        if (token != null) request.Headers.Add("X-Vector-Token", token);
+        if (origin != null) request.Headers.Add("Origin", origin);
+        if (body != null)
+        {
+            byte[] bytes = Encoding.UTF8.GetBytes(body); request.ContentLength = bytes.Length;
+            using (var stream = request.GetRequestStream()) stream.Write(bytes, 0, bytes.Length);
+        }
+        HttpWebResponse response;
+        try { response = (HttpWebResponse)request.GetResponse(); }
+        catch (WebException error) { response = error.Response as HttpWebResponse; if (response == null) throw; }
+        using (response) using (var reader = new StreamReader(response.GetResponseStream())) { status = (int)response.StatusCode; return reader.ReadToEnd(); }
+    }
+    private static void UpdateInterface(Action<bool, string> check, string directory)
+    {
+        var prompt = new UpdatePrompt();
+        check(!prompt.RequestRestart() && !prompt.TakeRestart(), "no restart before a verified download is ready");
+        prompt.Downloaded("9.8.7");
+        check(!prompt.RestartRequested && !prompt.TakeRestart(), "download completion never authorizes automatic installation");
+        check(prompt.RequestRestart() && !prompt.RequestRestart(), "one click authorizes one restart, duplicate clicks do not");
+        prompt.Downloaded("9.8.7");
+        check(prompt.RestartRequested && prompt.TakeRestart() && !prompt.TakeRestart(), "concurrent update check cannot erase a click or authorize a second installation");
+        prompt.Blocked();
+        check(!prompt.RestartRequested && prompt.Snapshot().Contains("battle-active") && prompt.RequestRestart(), "unsafe battle status requires a fresh click after returning to the hangar");
+        prompt.Failed("install-failed");
+        check(!prompt.RequestRestart() && prompt.Snapshot().Contains("install-failed"), "failed installation is visible and never loops automatically");
+
+        prompt = new UpdatePrompt();
+        using (var server = new LocalServer(new BattleFileStore(Path.Combine(directory, "update-api")), 0, null, null, prompt))
+        {
+            int status;
+            string html = UpdateRequest(server.Origin + "/", null, null, "GET", out status);
+            string token = System.Text.RegularExpressions.Regex.Match(html, "token:'([a-f0-9]{64})'").Groups[1].Value;
+            check(html.Contains("updates:true"), "native bootstrap explicitly advertises update controls");
+            UpdateRequest(server.Origin + "/api/updates", null, null, "GET", out status);
+            check(status == 403, "update status requires the per-launch token");
+            foreach (string origin in new[] { null, "null", "https://unrelated.example" })
+            {
+                UpdateRequest(server.Origin + "/api/updates/restart", token, origin, "POST", out status);
+                check(status == 403 && !prompt.RestartRequested, "restart requires an explicit same-origin request");
+            }
+            UpdateRequest(server.Origin + "/api/updates/restart", "wrong-token", server.Origin, "POST", out status);
+            check(status == 403, "restart rejects a wrong token");
+            UpdateRequest(server.Origin + "/api/updates/restart", token, server.Origin, "GET", out status);
+            check(status == 405, "reading a restart URL cannot restart the app");
+            UpdateRequest(server.Origin + "/api/updates", token, server.Origin, "POST", out status);
+            check(status == 405, "only the restart action accepts POST");
+            UpdateRequest(server.Origin + "/api/updates/restart", token, server.Origin, "POST", out status, "{}");
+            check(status == 400, "restart cannot accept a path, release URL or other body");
+            UpdateRequest(server.Origin + "/api/updates/restart", token, server.Origin, "POST", out status);
+            check(status == 409, "restart without a ready download is rejected");
+            prompt.Downloaded("9.8.7");
+            string snapshot = UpdateRequest(server.Origin + "/api/updates", token, server.Origin, "GET", out status);
+            check(status == 200 && snapshot == "{\"state\":\"ready\",\"version\":\"9.8.7\",\"error\":null}" && !prompt.RestartRequested, "update polling exposes only state/version/error and never installs");
+            snapshot = UpdateRequest(server.Origin + "/api/updates/restart", token, server.Origin, "POST", out status);
+            check(status == 202 && prompt.RestartRequested && snapshot.Contains("restarting"), "authenticated restart click queues the native handoff without closing the HTTP response");
+            UpdateRequest(server.Origin + "/api/updates/restart", token, server.Origin, "POST", out status);
+            check(status == 409 && prompt.TakeRestart() && !prompt.TakeRestart(), "multiple browser tabs cannot start duplicate installers");
+        }
+    }
+    private static void BattleReadiness(Action<bool, string> check)
+    {
+        // Private loopback fixtures: never query the user's game or live map port.
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        string url = "http://127.0.0.1:" + ((IPEndPoint)listener.LocalEndpoint).Port + "/map_info.json";
+        listener.Stop();
+        check(AppUpdates.OutOfBattle(url, () => true), "closed game permits installation after Windows reports connection refusal");
+        check(!AppUpdates.OutOfBattle(url, () => false), "missing map feed with a running game defers installation");
+        check(!AppUpdates.OutOfBattle(url, () => { throw new IOException("process check unavailable"); }), "unavailable game process check defers installation");
+
+        foreach (string body in new[] { "{\"valid\":false}", "{\"valid\":true}", "{\"valid\":\"false\"}", "{}", "invalid", null })
+        {
+            listener = new TcpListener(IPAddress.Loopback, 0); listener.Start();
+            url = "http://127.0.0.1:" + ((IPEndPoint)listener.LocalEndpoint).Port + "/map_info.json";
+            var readyListener = listener;
+            using (var stop = new ManualResetEvent(false))
+            {
+                var responder = new Thread(() => {
+                    try
+                    {
+                        using (var client = readyListener.AcceptTcpClient())
+                        using (var stream = client.GetStream())
+                        {
+                            if (body == null) { stop.WaitOne(7000); return; }
+                            stream.ReadTimeout = 5000;
+                            var reader = new StreamReader(stream, Encoding.ASCII);
+                            for (int line = 0; line < 64; line++) { if (string.IsNullOrEmpty(reader.ReadLine())) break; }
+                            byte[] bytes = Encoding.UTF8.GetBytes(body);
+                            byte[] headers = Encoding.ASCII.GetBytes("HTTP/1.1 200 OK\r\nContent-Length: " + bytes.Length + "\r\nConnection: close\r\n\r\n");
+                            stream.Write(headers, 0, headers.Length); stream.Write(bytes, 0, bytes.Length);
+                        }
+                    }
+                    catch (SocketException) { }
+                    catch (IOException) { }
+                }) { IsBackground = true };
+                responder.Start();
+                try
+                {
+                    bool checkedGame = false;
+                    bool result = AppUpdates.OutOfBattle(url, () => { checkedGame = true; return true; });
+                    check(result == (body == "{\"valid\":false}") && !checkedGame,
+                        body == null ? "unresponsive feed still defers installation with the game closed" : "only an explicit hangar response permits installation: " + body);
+                }
+                finally { stop.Set(); listener.Stop(); responder.Join(8000); }
+            }
         }
     }
     public static int FixtureMain(string[] args)

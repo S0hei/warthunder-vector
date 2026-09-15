@@ -1,4 +1,4 @@
-// Optional asset-authoring step; normal builds use the committed ICO.
+// Optional asset-authoring step; normal builds use the committed ICO and inline brand.
 // Usage: node scripts/build-icon.mjs [absolute path to a sharp module]
 import { readFile, writeFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
@@ -6,7 +6,8 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const sharp = (await import(pathToFileURL(process.argv[2] ?? require.resolve('sharp')).href)).default;
-const source = await readFile(new URL('../public/favicon.svg', import.meta.url));
+// Keep the generated data URI stable across Windows and Linux checkouts.
+const source = Buffer.from((await readFile(new URL('../public/favicon.svg', import.meta.url), 'utf8')).replace(/\r\n/g, '\n'));
 const sizes = [16, 20, 24, 32, 48, 64, 128, 256];
 const frames = await Promise.all(sizes.map(async (size) => {
   const raster = sharp(source, { density: 384 }).resize(size, size);
@@ -51,4 +52,7 @@ for (let i = 0; i < sizes.length; i++) {
   offset += frames[i].length;
 }
 await writeFile(new URL('../public/vector.ico', import.meta.url), Buffer.concat([header, ...frames]));
+await writeFile(new URL('../app/lib/vector-brand.json', import.meta.url), JSON.stringify({
+  src: `data:image/svg+xml;base64,${source.toString('base64')}`,
+}) + '\n');
 process.stdout.write(`Vector icon created (${sizes.join(', ')} px).\n`);

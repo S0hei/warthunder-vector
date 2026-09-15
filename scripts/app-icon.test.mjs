@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { componentLoader } from './component-test-loader.mjs';
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 
@@ -35,12 +38,53 @@ test('Windows icon has all eight resolutions with complete, non-overlapping fram
   assert.equal(next, ico.length);
 });
 
-test('app icon matches Vector colors and replaces the starter favicon', () => {
+test('original Vector emblem uses the War Thunder theme palette and safe, scalable artwork', () => {
   const svg = read('public/favicon.svg');
   assert.match(svg, /viewBox="0 0 64 64"/);
-  assert.match(svg, /fill="#101311"/);
-  assert.match(svg, /fill="#b8ef46"/);
-  assert.doesNotMatch(svg, /#68C4FF|#0C79D8/);
+  for (const color of ['#13191b', '#31424a', '#cfd8dc', '#e53935']) assert.ok(svg.includes(color));
+  assert.doesNotMatch(svg, /#b8ef46|#68C4FF|#0C79D8|<script|<image|<text|<foreignObject|\bon\w+=|\bhref=/i);
+});
+
+test('the smallest Windows frame includes the red emblem and transparent cut corners', () => {
+  const ico = readFileSync(new URL('../public/vector.ico', import.meta.url));
+  const start = ico.readUInt32LE(18) + 40;
+  let red = 0, transparent = 0, silver = 0;
+  for (let i = 0; i < 16 * 16; i++) {
+    const [b, g, r, a] = ico.subarray(start + i * 4, start + i * 4 + 4);
+    if (a === 0) transparent++;
+    if (a > 128 && r > 120 && r > g * 1.5 && r > b * 1.5) red++;
+    if (a > 128 && Math.min(r, g, b) > 140) silver++;
+  }
+  assert.ok(red > 0 && silver > 8 && transparent > 4);
+});
+
+test('sidebar and browser share identical embedded artwork without a new asset request', () => {
+  const brand = JSON.parse(read('app/lib/vector-brand.json'));
+  assert.ok(brand.src.startsWith('data:image/svg+xml;base64,'));
+  assert.equal(Buffer.from(brand.src.split(',')[1], 'base64').toString('utf8'), read('public/favicon.svg').replace(/\r\n/g, '\n'));
+  const Component = componentLoader()('vector-mark.tsx').default;
+  const html = renderToStaticMarkup(React.createElement(Component));
+  assert.match(html, /aria-hidden="true"/);
+  assert.ok(html.includes(brand.src));
+  assert.match(read('app/page.tsx'), /className="brand-mark" role="img" aria-label=\{t\("Vector tactical map"\)\}><VectorMark \/>/);
+});
+
+test('control artwork is consistent, decorative, distinct and independent of emoji fonts', () => {
+  const Component = componentLoader()('control-icon.tsx').default;
+  const names = ['contrast', 'fullscreen', 'zoomIn', 'zoomOut', 'fitAircraft', 'fitBattle', 'center', 'close', 'external', 'restart'];
+  const shapes = new Set();
+  for (const name of names) {
+    const html = renderToStaticMarkup(React.createElement(Component, { name }));
+    assert.match(html, /viewBox="0 0 24 24"/); assert.match(html, /aria-hidden="true"/); assert.match(html, /focusable="false"/);
+    assert.match(html, /stroke="currentColor"/); assert.doesNotMatch(html, /<text|<image|<title|tabindex=/);
+    shapes.add([...html.matchAll(/ d="([^"]+)"/g)].map(m => m[1]).join('|'));
+  }
+  assert.equal(shapes.size, names.length);
+  const page = read('app/page.tsx');
+  assert.doesNotMatch(page, />[◐⛶⤢⌖×]<|>B<|>−<|>\+</);
+  for (const name of names.filter(n => n !== 'restart')) assert.ok(page.includes(`<ControlIcon name="${name}" />`));
+  assert.match(read('app/app-update-notice.tsx'), /<ControlIcon name="restart" \/>/);
+  assert.match(read('app/globals.css'), /\.control-icon\s*\{[^}]*width: 1\.35rem;[^}]*height: 1\.35rem;[^}]*pointer-events: none/);
 });
 
 test('Windows shell and tray receive the same embedded icon, disposed on exit', () => {

@@ -170,6 +170,7 @@ namespace VectorPortable
         private BattleTeamReader teamReader;
         public long Offset { get; private set; }
         public BattleLogReader(DateTimeOffset start, Action<FileBattle> save, CombatTeamFeed teamFeed = null) { this.start = start; this.save = save; this.teamFeed = teamFeed; }
+        public void Scanned() { if (teamReader != null) teamReader.Scanned(); }
 
         public void Feed(byte[] encoded, int count)
         {
@@ -209,6 +210,7 @@ namespace VectorPortable
                 ownUnit = pendingSpawnUnit = -1;
                 seenSpawnUnits.Clear();
                 teamReader = current == null || teamFeed == null ? null : new BattleTeamReader(current.id, start.AddSeconds(seconds), teamFeed);
+                if (teamReader != null) teamReader.Publish();
                 return;
             }
             FileBattle target = current ?? (seconds - endedTime >= 0 && seconds - endedTime < 3 ? ended : null);
@@ -253,7 +255,7 @@ namespace VectorPortable
             Match vehicle = Regex.Match(line, @"\[D\]\s+received SessionStats ([a-z0-9_-]{1,128}) (?:WP|EXP):");
             if (vehicle.Success && vehicle.Groups[1].Value != "sum") { target.vehicles = target.vehicles.Concat(new[] { vehicle.Groups[1].Value }).Distinct().Take(32).ToArray(); return; }
             if (Regex.IsMatch(line, @"\[D\]\s+AcesMission::endFinally [0-9]+ "))
-            { ended = target; endedTime = seconds; current = null; save(target); return; }
+            { if (teamReader != null) teamReader.End(); ended = target; endedTime = seconds; current = null; save(target); return; }
             Match outcome = Regex.Match(line, @"\[D\]\s+AcesMission::setStatus MISSION_STATUS_RUNNING -> MISSION_STATUS_(SUCCESS|FAIL)\s*$");
             if (outcome.Success && target == ended) { target.outcome = outcome.Groups[1].Value == "SUCCESS" ? "win" : "loss"; target.rewardsFinal = true; save(target); }
         }
@@ -264,21 +266,29 @@ namespace VectorPortable
     {
         private readonly object gate = new object();
         private DateTimeOffset latest = DateTimeOffset.MinValue;
-        private string snapshot = "{\"schemaVersion\":1,\"sessionId\":null,\"events\":[]}";
-        public void Publish(string session, DateTimeOffset started, object[] events)
+        private string sessionId, scannedAt;
+        private object[] entries = new object[0];
+        private object battle;
+        public void Publish(string session, DateTimeOffset started, object[] events, object summary = null)
         {
             lock (gate)
             {
                 if (started < latest) return;
+                if (started != latest || sessionId != session) scannedAt = null;
                 latest = started;
-                snapshot = new JavaScriptSerializer().Serialize(new { schemaVersion = 1, sessionId = session, events });
+                sessionId = session; entries = events; battle = summary;
             }
         }
-        public string Snapshot() { lock (gate) return snapshot; }
+        public void Scanned(string session, DateTimeOffset started)
+        { lock (gate) if (sessionId == session && latest == started) scannedAt = DateTimeOffset.UtcNow.ToString("o"); }
+        public string Snapshot() { lock (gate) return new JavaScriptSerializer().Serialize(new { schemaVersion = 1, sessionId, events = entries, summary = battle, scannedAt }); }
     }
 
     public sealed class BattleTeamReader
     {
+        private sealed class PlayerState { public string name; public int team; public bool alive; }
+        private readonly Dictionary<string, PlayerState> players = new Dictionary<string, PlayerState>();
+        private bool active = true;
         private sealed class HudEvent { public string message, actor, target, actorCode, targetCode; public DateTimeOffset time; }
         private readonly Dictionary<string, int> roster = new Dictionary<string, int>();
         private readonly Dictionary<string, int> palette = new Dictionary<string, int>();
@@ -326,6 +336,17 @@ namespace VectorPortable
                 string name = player.Groups[1].Value; int team = int.Parse(player.Groups[2].Value);
                 if (roster.Count < 256 || roster.ContainsKey(name)) roster[name] = team;
                 if (player.Groups[3].Value == "1") { ownName = name; ownTeam = team; }
+                // Account-backed roster entries only, never anonymous map aircraft.
+                Match human = Regex.Match(line, @"MPlayer::onStateChanged\(\) MULP pid:[0-9]+ n:'.{1,128}' ([A-Z_]+)->([A-Z_]+).*\buid=([1-9][0-9]{0,18})\b");
+                if (human.Success && !Regex.IsMatch(name, @"\A\[(?:ai|ии)\]", RegexOptions.IgnoreCase))
+                {
+                    string id = human.Groups[3].Value; PlayerState old;
+                    bool existed = players.TryGetValue(id, out old);
+                    // Repeated IN_FLIGHT snapshots must not resurrect a shot-down plane.
+                    bool alive = human.Groups[2].Value == "IN_FLIGHT" &&
+                        (human.Groups[1].Value != "IN_FLIGHT" || !existed || old.alive);
+                    if (existed || players.Count < 256) players[id] = new PlayerState { name = name, team = team, alive = alive };
+                }
             }
             else
             {
@@ -342,12 +363,25 @@ namespace VectorPortable
                 string targetCode = spans.Where(m => m.Groups[2].Value == target).Select(m => m.Groups[1].Value).FirstOrDefault();
                 events.Add(new HudEvent { message = plain, actor = actor, target = target, actorCode = actorCode, targetCode = targetCode, time = time });
                 if (events.Count > 128) events.RemoveAt(0);
+                Match death = Regex.Match(plain, @"\A.+ \(.+\) (?:уничтожил|сбил|destroyed|shot down) (.+)\z");
+                string victim = crash.Success ? Name(actor) : death.Success ? Name(death.Groups[1].Value) : "";
+                var matches = players.Values.Where(p => p.name == victim).ToArray();
+                if (matches.Length == 1) matches[0].alive = false;
             }
+            Publish();
+        }
+        public void End() { active = false; Publish(); }
+        public void Scanned() { feed.Scanned(session, started); }
+        public void Publish()
+        {
             // Learn palette semantics from actual roster team IDs, not fixed color
             // numbers, user color preferences, or an assumption about friendly fire.
             foreach (HudEvent e in events) { Learn(e.actor, e.actorCode); Learn(e.target, e.targetCode); }
             feed.Publish(session, started, events.Select(e => (object)new { e.message, observedAt = e.time.ToUniversalTime().ToString("o"),
-                actorTeam = Side(e.actor, e.actorCode), targetTeam = Side(e.target, e.targetCode), targetInRoster = Team(e.target) != 0 }).ToArray());
+                actorTeam = Side(e.actor, e.actorCode), targetTeam = Side(e.target, e.targetCode), targetInRoster = Team(e.target) != 0 }).ToArray(),
+                new { active, joinedAt = started.ToUniversalTime().ToString("o"),
+                    alliesAlive = ownTeam == 0 || !players.Values.Any(p => p.team == ownTeam) ? (int?)null : players.Values.Count(p => p.team == ownTeam && p.alive),
+                    enemiesAlive = ownTeam == 0 || !players.Values.Any(p => p.team != ownTeam) ? (int?)null : players.Values.Count(p => p.team != ownTeam && p.alive) });
         }
     }
 
@@ -553,13 +587,14 @@ namespace VectorPortable
                                 !store.NeedsSpawnEvidence(new DateTimeOffset(time), new DateTimeOffset(info.LastWriteTimeUtc).AddSeconds(1))) continue;
                             BattleLogReader log;
                             if (!logs.TryGetValue(file, out log) || info.Length < log.Offset) logs[file] = log = new BattleLogReader(new DateTimeOffset(time), store.Upsert, teams);
-                            if (info.Length == log.Offset) continue;
+                            if (info.Length == log.Offset) { log.Scanned(); continue; }
                             using (var input = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
                             {
                                 input.Position = log.Offset; byte[] buffer = new byte[65536]; int n, budget = 16777216;
                                 try { while (budget > 0 && (n = input.Read(buffer, 0, Math.Min(buffer.Length, budget))) > 0) { log.Feed(buffer, n); budget -= n; } }
                                 catch { logs.Remove(file); throw; } // Retry a failed save from the source, never skip it.
                                 behind |= input.Position < input.Length;
+                                if (input.Position == input.Length) log.Scanned();
                             }
                         }
                         catch { errors = true; }

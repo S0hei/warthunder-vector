@@ -1,5 +1,5 @@
 declare global {
-  interface Window { __VECTOR__?: { origin: string; token: string; version?: string; instance?: string; language?: unknown } }
+  interface Window { __VECTOR__?: { origin: string; token: string; version?: string; instance?: string; language?: unknown; updates?: boolean } }
 }
 
 export function vectorEndpoint(route: 'battles' | 'activity-teams' | 'language'): { url: string; headers: Record<string, string> } | null {

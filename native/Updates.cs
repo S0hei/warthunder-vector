@@ -14,6 +14,41 @@ using System.Web.Script.Serialization;
 
 namespace VectorPortable
 {
+    public interface IAppUpdates
+    {
+        string Snapshot();
+        bool RequestRestart();
+    }
+
+    internal sealed class UpdatePrompt : IAppUpdates
+    {
+        private readonly object gate = new object();
+        private string state = "idle", version, error;
+        private bool requested;
+        public bool RestartRequested { get { lock (gate) return requested; } }
+        public string Snapshot()
+        { lock (gate) return new JavaScriptSerializer().Serialize(new { state, version, error }); }
+        public void Downloaded(string value)
+        {
+            UpdateSource.ParseVersion(value);
+            lock (gate) { if (state == "restarting" && version == value) return; version = value; state = "ready"; error = null; requested = false; }
+        }
+        public bool RequestRestart()
+        {
+            lock (gate)
+            {
+                if (state != "ready" || requested) return false;
+                requested = true; state = "restarting"; error = null; return true;
+            }
+        }
+        public bool TakeRestart()
+        { lock (gate) { if (!requested) return false; requested = false; return true; } }
+        public void Blocked()
+        { lock (gate) { requested = false; state = "ready"; error = "battle-active"; } }
+        public void Failed(string reason)
+        { lock (gate) { requested = false; state = "failed"; error = reason; } }
+    }
+
     internal sealed class ReleaseUpdate
     {
         public string Version, Url, Sha256;
@@ -272,8 +307,9 @@ namespace VectorPortable
         }
     }
 
-    internal sealed class AppUpdates : IDisposable
+    internal sealed class AppUpdates : IAppUpdates, IDisposable
     {
+        private readonly UpdatePrompt prompt = new UpdatePrompt();
         private readonly Timer timer;
         private readonly string executable, cache;
         private int busy;
@@ -283,10 +319,25 @@ namespace VectorPortable
         private volatile ReleaseUpdate pending;
         public volatile string Status = "App updates on";
         public volatile bool ReadyToExit;
+        public bool RestartRequested { get { return prompt.RestartRequested; } }
+        public string Snapshot() { return prompt.Snapshot(); }
+        public bool RequestRestart() { return !stopped && prompt.RequestRestart(); }
         public AppUpdates(bool skipStartup)
         {
             executable = Assembly.GetExecutingAssembly().Location;
             cache = Path.Combine(Path.GetDirectoryName(executable), "Vector-data", "updates");
+            try
+            {
+                string failed = Path.Combine(cache, "failed-version.txt");
+                UpdateInstaller.CheckNoLinks(failed);
+                if (File.Exists(failed) && new FileInfo(failed).Length <= 256)
+                {
+                    var match = Regex.Match(File.ReadAllText(failed), @"\A([0-9]+\.[0-9]+\.[0-9]+) [a-f0-9]{64}\z");
+                    if (match.Success && UpdateSource.ParseVersion(match.Groups[1].Value) > UpdateSource.ParseVersion(VectorVersion.Current))
+                    { prompt.Downloaded(match.Groups[1].Value); prompt.Failed("rolled-back"); }
+                }
+            }
+            catch { }
             timer = new Timer(_ => Check(false), null, skipStartup ? 3600000 : 0, 3600000);
         }
         public void Check(bool manual)
@@ -316,7 +367,9 @@ namespace VectorPortable
                     if (stopped) return;
                     pending = release;
                 }
-                Status = "Update ready; waiting for the hangar";
+                // Downloading is automatic; replacing the app requires a fresh click.
+                if (!ReadyToExit && !prompt.RestartRequested)
+                { prompt.Downloaded(pending.Version); Status = "Update ready; restart Vector to install"; }
             }
             catch { Status = "App update check failed; will retry"; }
             finally
@@ -342,11 +395,12 @@ namespace VectorPortable
         }
         public void TryInstall()
         {
-            if (stopped || pending == null || ReadyToExit || Interlocked.CompareExchange(ref busy, 1, 0) != 0) return;
+            if (stopped || pending == null || ReadyToExit || !prompt.RestartRequested || Interlocked.CompareExchange(ref busy, 1, 0) != 0) return;
             try
             {
                 if (DateTime.UtcNow < nextInstallAttempt) return;
-                if (!OutOfBattle()) return;
+                if (!prompt.TakeRestart()) return;
+                if (!OutOfBattle()) { prompt.Blocked(); return; }
                 UpdateInstaller.CheckNoLinks(stage); UpdateInstaller.CheckNoLinks(executable);
                 var plan = new UpdatePlan { Target = executable, OldHash = UpdateSource.Hash(executable), Version = pending.Version, Size = pending.Size, Sha256 = pending.Sha256,
                     Nonce = Guid.NewGuid().ToString("N"), ParentId = Process.GetCurrentProcess().Id, ParentStarted = Process.GetCurrentProcess().StartTime.ToUniversalTime().Ticks };
@@ -363,19 +417,30 @@ namespace VectorPortable
                     // A helper that sees us stay in battle exits after 30 seconds.
                     nextInstallAttempt = DateTime.UtcNow.AddSeconds(45);
                     if (!ready.WaitOne(5000) || process.HasExited) throw new IOException("Update helper could not start.");
-                    if (stopped || !OutOfBattle()) return;
+                    if (stopped || !OutOfBattle()) { prompt.Blocked(); return; }
                     ReadyToExit = true; Status = "Restarting Vector";
                 }
             }
-            catch { Status = "Update could not be installed; current version kept"; pending = null; }
+            catch { Status = "Update could not be installed; current version kept"; prompt.Failed("install-failed"); pending = null; }
             finally { Interlocked.Exchange(ref busy, 0); }
         }
         internal static bool OutOfBattle()
         {
+            return OutOfBattle("http://127.0.0.1:8111/map_info.json", () => {
+                var games = Process.GetProcessesByName("aces");
+                bool closed = games.Length == 0;
+                foreach (var game in games) game.Dispose();
+                return closed;
+            });
+        }
+        internal static bool OutOfBattle(string mapInfoUrl, Func<bool> gameClosed)
+        {
             try
             {
-                var request = (HttpWebRequest)WebRequest.Create("http://127.0.0.1:8111/map_info.json");
-                request.Proxy = null; request.AllowAutoRedirect = false; request.Timeout = 1500; request.ReadWriteTimeout = 1500;
+                var request = (HttpWebRequest)WebRequest.Create(mapInfoUrl);
+                // Windows can take about two seconds to report a refused loopback
+                // connection. A shorter timeout hides that definite closed-game result.
+                request.Proxy = null; request.AllowAutoRedirect = false; request.Timeout = 5000; request.ReadWriteTimeout = 1500;
                 using (var response = request.GetResponse()) using (var data = new MemoryStream())
                 {
                     UpdateSource.CopyBounded(response.GetResponseStream(), data, 65536);
@@ -389,10 +454,8 @@ namespace VectorPortable
                 // A timeout/error is ambiguous. Only a refused loopback connection with
                 // no running game is safe to treat as the game being closed.
                 if (error.Status != WebExceptionStatus.ConnectFailure) return false;
-                var games = Process.GetProcessesByName("aces");
-                bool closed = games.Length == 0;
-                foreach (var game in games) game.Dispose();
-                return closed;
+                try { return gameClosed(); }
+                catch { return false; }
             }
             catch { return false; }
         }

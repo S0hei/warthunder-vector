@@ -23,12 +23,14 @@ namespace VectorPortable
         private readonly string token;
         private readonly string instance = Guid.NewGuid().ToString("N");
         private readonly LanguageSettings languages;
+        private readonly IAppUpdates updates;
         private readonly Semaphore clients = new Semaphore(8, 8);
         private volatile bool stopped;
         public readonly string Origin;
 
-        public LocalServer(BattleFileStore battles, int port, CombatTeamFeed teams = null, LanguageSettings languages = null)
+        public LocalServer(BattleFileStore battles, int port, CombatTeamFeed teams = null, LanguageSettings languages = null, IAppUpdates updates = null)
         {
+            this.updates = updates;
             this.languages = languages;
             this.teams = teams ?? new CombatTeamFeed();
             this.battles = battles;
@@ -90,6 +92,22 @@ namespace VectorPortable
                     string host, origin, supplied;
                     if (request.Length != 3 || !fields.TryGetValue("Host", out host) || host != new Uri(Origin).Authority ||
                         (fields.TryGetValue("Origin", out origin) && origin != Origin)) { Reply(stream, 403, "text/plain", new byte[0]); return; }
+                    if ((request[1] == "/api/updates" || request[1] == "/api/updates/restart") && updates != null)
+                    {
+                        if (!fields.TryGetValue("X-Vector-Token", out supplied) || supplied != token) { Reply(stream, 403, "text/plain", new byte[0]); return; }
+                        if (request[1] == "/api/updates/restart")
+                        {
+                            if (request[0] != "POST") { Reply(stream, 405, "text/plain", new byte[0]); return; }
+                            if (origin != Origin) { Reply(stream, 403, "text/plain", new byte[0]); return; }
+                            string length;
+                            if (fields.ContainsKey("Transfer-Encoding") || (fields.TryGetValue("Content-Length", out length) && length != "0"))
+                            { Reply(stream, 400, "text/plain", new byte[0]); return; }
+                            bool accepted = updates.RequestRestart();
+                            Reply(stream, accepted ? 202 : 409, "application/json", Encoding.UTF8.GetBytes(updates.Snapshot())); return;
+                        }
+                        if (request[0] != "GET") { Reply(stream, 405, "text/plain", new byte[0]); return; }
+                        Reply(stream, 200, "application/json", Encoding.UTF8.GetBytes(updates.Snapshot())); return;
+                    }
                     if (request[1] == "/api/language" && languages != null)
                     {
                         if (!fields.TryGetValue("X-Vector-Token", out supplied) || supplied != token) { Reply(stream, 403, "text/plain", new byte[0]); return; }
@@ -114,7 +132,7 @@ namespace VectorPortable
                     if (request[0] != "GET") { Reply(stream, 405, "text/plain", new byte[0]); return; }
                     if (request[1] == "/" || request[1] == "/index.html")
                     {
-                        string boot = "<script>window.__VECTOR__={origin:'" + Origin + "',token:'" + token + "',version:'" + VectorVersion.Current + "',instance:'" + instance + "'" + (languages == null ? "" : ",language:" + languages.Json()) + "};</script>";
+                        string boot = "<script>window.__VECTOR__={origin:'" + Origin + "',token:'" + token + "',version:'" + VectorVersion.Current + "',instance:'" + instance + "'" + (updates == null ? "" : ",updates:true") + (languages == null ? "" : ",language:" + languages.Json()) + "};</script>";
                         Reply(stream, 200, "text/html; charset=utf-8", Encoding.UTF8.GetBytes(html.Replace("<head>", "<head>" + boot)));
                     }
                     else if (request[1] == "/api/version") Reply(stream, 200, "application/json; charset=utf-8", Encoding.UTF8.GetBytes("{\"version\":\"" + VectorVersion.Current + "\",\"instance\":\"" + instance + "\"}"));
@@ -136,7 +154,7 @@ namespace VectorPortable
 
         private static void Reply(Stream stream, int status, string type, byte[] body, string etag = null)
         {
-            string reason = status == 200 ? "OK" : status == 304 ? "Not Modified" : "Request rejected";
+            string reason = status == 200 ? "OK" : status == 202 ? "Accepted" : status == 304 ? "Not Modified" : "Request rejected";
             string headers = "HTTP/1.1 " + status + " " + reason + "\r\nContent-Type: " + type + "\r\nContent-Length: " + body.Length +
                 "\r\nConnection: close\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nX-Frame-Options: DENY\r\nReferrer-Policy: no-referrer\r\n" +
                 (etag == null ? "" : "ETag: " + etag + "\r\n") + "\r\n";
@@ -171,7 +189,6 @@ namespace VectorPortable
         private readonly AppUpdates updates;
         private readonly LanguageSettings languages;
         private readonly ToolStripMenuItem updateStatus;
-        private int updateTicks;
         private bool paused;
 
         public VectorContext(EventWaitHandle reopen, bool openBrowser, bool skipUpdate)
@@ -181,9 +198,9 @@ namespace VectorPortable
             var battles = new BattleFileStore(Path.Combine(data, "battles"));
             var teams = new CombatTeamFeed();
             languages = new LanguageSettings(data, preference => LanguageDetection.Detect(preference, collector == null ? GameFileCollector.Discover() : collector.GameFolder));
-            server = new LocalServer(battles, 8112, teams, languages);
-            collector = new GameFileCollector(battles, data, teams);
             updates = new AppUpdates(skipUpdate);
+            server = new LocalServer(battles, 8112, teams, languages, updates);
+            collector = new GameFileCollector(battles, data, teams);
             var menu = new ContextMenuStrip();
             menu.Items.Add(Item("Open Vector", (s, e) => Open()));
             var pause = Item("Pause history updates", null);
@@ -215,7 +232,7 @@ namespace VectorPortable
                 foreach (ToolStripItem item in menu.Items) if (item.Tag is string) item.Text = languages.Text((string)item.Tag);
                 tray.Text = languages.Text("Vector: automatic battle history");
                 if (updates.ReadyToExit) { ExitThread(); return; }
-                if (++updateTicks % 15 == 0) ThreadPool.QueueUserWorkItem(_ => updates.TryInstall());
+                if (updates.RestartRequested) ThreadPool.QueueUserWorkItem(_ => updates.TryInstall());
             };
             timer.Start();
             if (openBrowser) Open();
