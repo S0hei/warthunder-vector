@@ -46,9 +46,25 @@ test('reading sizes, panel widths and controls use scalable units', () => {
   assert.match(css, /--type-label: \.875rem/);
   assert.match(css, /--type-body: 1rem/);
   assert.doesNotMatch(css, /font(?:-size)?:[^;{}]*\dpx/);
-  assert.match(css, /grid-template-columns: 4\.5rem minmax\(0, 1fr\) 27\.5rem/);
+  assert.match(css, /grid-template-columns: 4\.5rem minmax\(0, 1fr\) clamp\(27\.5rem, 24vw, 40rem\)/);
   assert.match(css, /\.filter-bar \{ flex-wrap: wrap/);
   assert.match(css, /\.intel-tabs \{ flex-wrap: wrap/);
+});
+
+test('the sidebar grows proportionally on 4K while preserving the map and respecting short windows', () => {
+  const rule = /grid-template-columns: 4\.5rem minmax\(0, 1fr\) clamp\(([\d.]+)rem, ([\d.]+)vw, ([\d.]+)rem\)/.exec(css);
+  assert.ok(rule);
+  const [, min, fluid, max] = rule.map(Number);
+  const panel = (w, h) => Math.min(max * rootSize(w, h), Math.max(min * rootSize(w, h), fluid * w / 100));
+  for (const [w, h] of [[3810, 1939], [3817, 1957], [3840, 2160], [2560, 1440], [1920, 1080]]) {
+    assert.ok(panel(w, h) / w >= .23 && panel(w, h) / w <= .25);
+    assert.ok(w - panel(w, h) - 4.5 * rootSize(w, h) > w * .7);
+  }
+  assert.equal(panel(5120, 700), 640);
+  assert.match(css, /\.map-dock\s*\{[^}]*grid-template-columns: auto minmax\(0, 1fr\) auto/);
+  assert.match(css, /@container \(max-width: 70rem\)/);
+  assert.match(css, /\.map-dock \.filter-bar\s*\{[^}]*grid-column: 1 \/ -1/);
+  assert.match(css, /\.tactical-shell:not\(\.session-mode\) \.intel-panel\s*\{[^}]*position: static/);
 });
 test('short windows fit the actual viewport and tables remain scrollable', () => {
   const shell = /\.tactical-shell \{([^}]+)\}/.exec(css)[1];

@@ -60,16 +60,16 @@ export default function FileBattlesPanel({ archive, account, accounts, onAccount
       {period.error && <p id="results-date-error" className="results-message error" role="alert">{t(period.error)}</p>}
     </fieldset>}
     <div className="results-win-summary">
-      <div><GameLabel icon="victories">{t("Win rate")}</GameLabel><strong>{totals.winRate === null ? notAvailable : `${number(totals.winRate, 1)}%`}</strong></div>
+      <div><GameLabel icon="victories">{t("Win rate")}</GameLabel><strong className={totals.winRate === null ? 'is-unavailable' : undefined}>{totals.winRate === null ? notAvailable : `${number(totals.winRate, 1)}%`}</strong></div>
       <p><span className="positive">{t('{count} won', { count: number(totals.wins) })}</span><span className="negative">{t('{count} lost', { count: number(totals.losses) })}</span><span>{t('{count} without a result', { count: number(totals.unresolved) })}</span></p>
     </div>
     <dl className="results-totals results-ratios">
-      <div><dt><BattleStatLabel kind="killDeath" /></dt><dd>{totals.deaths === 0 && totals.kills > 0 ? '∞' : number(totals.kd, 2)}</dd><small>{countLabel(totals.kills, 'kill')} · {countLabel(totals.deaths, 'death')}</small><small>{t('Stats from {known}/{total} battles', { known: totals.scoreCount, total: totals.count })}</small></div>
-      <div><dt><BattleStatLabel kind="killSpawn" /></dt><dd>{number(totals.ks, 2)}</dd><small>{countLabel(totals.spawnKills, 'kill')} · {countLabel(totals.spawns, 'spawn')}</small><small>{t('Stats from {known}/{total} battles', { known: totals.spawnCount, total: totals.count })}</small></div>
+      <div><dt><BattleStatLabel kind="killDeath" /></dt><dd className={totals.kd === null && !(totals.deaths === 0 && totals.kills > 0) ? 'is-unavailable' : undefined}>{totals.deaths === 0 && totals.kills > 0 ? '∞' : number(totals.kd, 2)}</dd><small>{countLabel(totals.kills, 'kill')} · {countLabel(totals.deaths, 'death')}</small>{totals.count > 0 && <small>{t('Stats from {known}/{total} battles', { known: totals.scoreCount, total: totals.count })}</small>}</div>
+      <div><dt><BattleStatLabel kind="killSpawn" /></dt><dd className={totals.ks === null ? 'is-unavailable' : undefined}>{number(totals.ks, 2)}</dd><small>{countLabel(totals.spawnKills, 'kill')} · {countLabel(totals.spawns, 'spawn')}</small>{totals.count > 0 && <small>{t('Stats from {known}/{total} battles', { known: totals.spawnCount, total: totals.count })}</small>}</div>
     </dl>
     <dl className="results-rewards">
-      <div><dt><RewardLabel kind="wp" /></dt><dd>{number(totals.wp)}</dd><small>{t('{battles} confirmed', { battles: countLabel(totals.wpCount, 'battle') })}</small></div>
-      <div><dt><RewardLabel kind="exp" /></dt><dd>{number(totals.exp)}</dd><small>{t('{battles} confirmed', { battles: countLabel(totals.expCount, 'battle') })}</small></div>
+      <div><dt><RewardLabel kind="wp" /></dt><dd className={totals.wp === null ? 'is-unavailable' : undefined}>{number(totals.wp)}</dd>{totals.count > 0 && <small>{t('{battles} confirmed', { battles: countLabel(totals.wpCount, 'battle') })}</small>}</div>
+      <div><dt><RewardLabel kind="exp" /></dt><dd className={totals.exp === null ? 'is-unavailable' : undefined}>{number(totals.exp)}</dd>{totals.count > 0 && <small>{t('{battles} confirmed', { battles: countLabel(totals.expCount, 'battle') })}</small>}</div>
     </dl>
     <div className="results-table-wrap" role="region" tabIndex={0} aria-label={t("Saved battle history")}>
       <table className="results-table"><caption className="activity-sr-only">{t("Saved battles, newest first. Only confirmed results count toward win rate and reward totals. AI kills are counted separately.")}</caption>

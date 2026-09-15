@@ -652,14 +652,13 @@ function VectorApp() {
         </div>
 
         <header className="topbar">
-          <div>
-            <p className="eyebrow">{t("Vector / Live map")}</p>
+          <div className="map-heading">
             <h1>{t("Current battle")}</h1>
+            <div className={`connection-pill ${connected ? '' : 'offline'}`}>
+              <span /> {connected ? t("Live") : t("Game disconnected")}
+            </div>
           </div>
           <BattleStatusStrip battle={activity.battle} connected={connected} now={clock} />
-          <div className={`connection-pill ${connected ? '' : 'offline'}`}>
-            <span /> {connected ? t("Live") : t("Game disconnected")}
-          </div>
         </header>
 
         {!connected && (
@@ -683,24 +682,26 @@ function VectorApp() {
           </article>
         )}
 
-        <div className="map-tools" aria-label={t("Map controls")}>
-          <button aria-label={t("Zoom in")} title={t("Zoom in (+)")} onClick={() => setZoomSafe(zoom + 0.25)}><ControlIcon name="zoomIn" /></button>
-          <button aria-label={t("Zoom out")} title={t("Zoom out (−)")} onClick={() => setZoomSafe(zoom - 0.25)}><ControlIcon name="zoomOut" /></button>
-          <button className={autoFit === 'air' ? 'active' : ''} aria-pressed={autoFit === 'air'} aria-label={t("Fit map to aircraft")} title={t("Fit map to aircraft (0)")} onClick={() => enableAutoFit('air')}><ControlIcon name="fitAircraft" /></button>
-          <button className={autoFit === 'battle' ? 'active' : ''} aria-pressed={autoFit === 'battle'} aria-label={t("Fit map between airfields")} title={t("Fit map between airfields (B)")} onClick={() => enableAutoFit('battle')}><ControlIcon name="fitBattle" /></button>
-          <button aria-label={t("Center on your aircraft")} title={t("Center on your aircraft (C)")} onClick={centerPlayer}><ControlIcon name="center" /></button>
-        </div>
+        <div className="map-dock">
+          <div className="map-tools" aria-label={t("Map controls")}>
+            <button aria-label={t("Zoom in")} title={t("Zoom in (+)")} onClick={() => setZoomSafe(zoom + 0.25)}><ControlIcon name="zoomIn" /></button>
+            <button aria-label={t("Zoom out")} title={t("Zoom out (−)")} onClick={() => setZoomSafe(zoom - 0.25)}><ControlIcon name="zoomOut" /></button>
+            <button className={autoFit === 'air' ? 'active' : ''} aria-pressed={autoFit === 'air'} aria-label={t("Fit map to aircraft")} title={t("Fit map to aircraft (0)")} onClick={() => enableAutoFit('air')}><ControlIcon name="fitAircraft" /></button>
+            <button className={autoFit === 'battle' ? 'active' : ''} aria-pressed={autoFit === 'battle'} aria-label={t("Fit map between airfields")} title={t("Fit map between airfields (B)")} onClick={() => enableAutoFit('battle')}><ControlIcon name="fitBattle" /></button>
+            <button aria-label={t("Center on your aircraft")} title={t("Center on your aircraft (C)")} onClick={centerPlayer}><ControlIcon name="center" /></button>
+          </div>
 
-        <div className="filter-bar" aria-label={t("Map layers")}>
-          <button className={filters.air ? 'active' : ''} aria-pressed={filters.air} onClick={() => toggleFilter('air')}><i className="air-i" />{' '}{t("Aircraft")}</button>
-          <button className={filters.ground ? 'active' : ''} aria-pressed={filters.ground} onClick={() => toggleFilter('ground')}><i className="ground-i" />{' '}{t("Ground")}</button>
-          <button className={filters.objectives ? 'active' : ''} aria-pressed={filters.objectives} onClick={() => toggleFilter('objectives')}><i className="objective-i" />{' '}{t("Objectives")}</button>
-          <button className={filters.airfields ? 'active' : ''} aria-pressed={filters.airfields} onClick={() => toggleFilter('airfields')}><i className="airfield-i" />{' '}{t("Airfields")}</button>
-          <button className={filters.spawns ? 'active' : ''} aria-pressed={filters.spawns} onClick={() => toggleFilter('spawns')}><i className="spawn-i" />{' '}{t("Spawns")}</button>
-          <button className={showMemory ? 'active' : ''} aria-pressed={showMemory} onClick={() => setShowMemory((visible) => !visible)}><i className="memory-i" />{' '}{t("Last positions")}</button>
-        </div>
+          <div className="filter-bar" aria-label={t("Map layers")}>
+            <button className={filters.air ? 'active' : ''} aria-pressed={filters.air} onClick={() => toggleFilter('air')}><i className="air-i" />{' '}{t("Aircraft")}</button>
+            <button className={filters.ground ? 'active' : ''} aria-pressed={filters.ground} onClick={() => toggleFilter('ground')}><i className="ground-i" />{' '}{t("Ground")}</button>
+            <button className={filters.objectives ? 'active' : ''} aria-pressed={filters.objectives} onClick={() => toggleFilter('objectives')}><i className="objective-i" />{' '}{t("Objectives")}</button>
+            <button className={filters.airfields ? 'active' : ''} aria-pressed={filters.airfields} onClick={() => toggleFilter('airfields')}><i className="airfield-i" />{' '}{t("Airfields")}</button>
+            <button className={filters.spawns ? 'active' : ''} aria-pressed={filters.spawns} onClick={() => toggleFilter('spawns')}><i className="spawn-i" />{' '}{t("Spawns")}</button>
+            <button className={showMemory ? 'active' : ''} aria-pressed={showMemory} onClick={() => setShowMemory((visible) => !visible)}><i className="memory-i" />{' '}{t("Last positions")}</button>
+          </div>
 
-        <div className="scale-bar"><span /> {number(gridKm, gridKm % 1 ? 1 : 0)}{' '}{t("km grid")}</div>
+          <div className="scale-bar"><span /> {number(gridKm, gridKm % 1 ? 1 : 0)}{' '}{t("km grid")}</div>
+        </div>
         </>}
       </section>
 
@@ -844,7 +845,7 @@ function VectorApp() {
           <FileBattlesPanel archive={archive} account={account} accounts={accounts} onAccountChange={setSelectedAccount} />
         </div>
 
-        <footer className="panel-footer"><span>{t("WT :8111")}</span><span>{t("Local / Read-only")}</span>
+        <footer className="panel-footer">
           <a className="github-download" href="https://github.com/S0hei/warthunder-vector/releases/latest" target="_blank" rel="noopener noreferrer">{t('Download on GitHub')} <ControlIcon name="external" /></a>
         </footer>
       </aside>

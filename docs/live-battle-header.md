@@ -1,6 +1,8 @@
 # Live battle header
 
 The map header shows known allied/enemy players alive and elapsed battle time.
+Compact team labels retain the known-player qualification in their tooltips.
+An unavailable clock shows `--:--`, with an explicit unavailable label for assistive technology.
 The sidebar footer links to the fixed GitHub latest-release page, including in
 the hangar. The link opens a new tab and does not restart or replace the app.
 

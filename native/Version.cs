@@ -8,5 +8,5 @@ using System.Reflection;
 
 namespace VectorPortable
 {
-    internal static class VectorVersion { public const string Current = "0.3.4"; }
+    internal static class VectorVersion { public const string Current = "0.3.5"; }
 }
