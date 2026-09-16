@@ -178,3 +178,18 @@ test('period controls keep native keyboard semantics and readable responsive siz
   const source = readFileSync(new URL('../app/file-battles-panel.tsx', import.meta.url), 'utf8');
   assert.match(source, /setInterval\(\(\) => setNow\(new Date\(\)\.toISOString\(\)\), 30000\)/);
 });
+
+test('period selector uses themed native options, decorative icons and a visible accent focus', () => {
+  const h = harness([]), select = h.input('Battle period');
+  assert.equal(select.type, 'select');
+  assert.equal(select.props.className, 'results-period-select');
+  const html = renderToStaticMarkup(h.render());
+  assert.match(html, /data-control-icon="calendar"[^>]*aria-hidden="true"/);
+  assert.match(html, /data-control-icon="chevronDown"[^>]*aria-hidden="true"/);
+  assert.equal((html.match(/<option value=/g) ?? []).length, 9); // Seven periods, two accounts.
+  const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
+  assert.match(css, /\.results-toolbar \.results-period-select\s*\{[^}]*appearance: none;[^}]*var\(--font-heading\)/);
+  assert.match(css, /@supports \(appearance: base-select\)/);
+  assert.match(css, /\.results-period-select::picker\(select\)\s*\{[^}]*background: var\(--panel\)/);
+  assert.match(css, /\.results-period-control \.results-period-select:focus-visible\s*\{ outline: 2px solid var\(--accent\)/);
+});

@@ -9,6 +9,8 @@ const paths = {
   close: 'M6 6L18 18M18 6L6 18',
   external: 'M13 3H21V11M21 3L10 14M8 5H3V21H19V16',
   restart: 'M20 3V9H14M20 9A8 8 0 1 0 20 15',
+  calendar: 'M4 5H20V21H4ZM8 2V8M16 2V8M4 10H20M8 14H10M14 14H16M8 17H10',
+  chevronDown: 'M6 9L12 15L18 9',
 } as const;
 
 export type ControlIconName = keyof typeof paths;

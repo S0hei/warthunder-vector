@@ -11,6 +11,7 @@ import BattleStatLabel from './battle-stat-label';
 import { GameLabel } from './game-icon';
 import { mapName } from './lib/map-names';
 import { battleOutcomeText } from './lib/ui-text';
+import ControlIcon from './control-icon';
 
 export default function FileBattlesPanel({ archive, account, accounts, onAccountChange }: { archive: FileArchive; account: string | undefined; accounts: [string, string][]; onAccountChange: (id: string) => void }) {
   const { t, number, countLabel, notAvailable } = useTranslation();
@@ -41,11 +42,15 @@ export default function FileBattlesPanel({ archive, account, accounts, onAccount
     {archive.status === 'read-error' && <p className="results-message error" role="status">{t("Some game files could not be read or saved. Check folder access and free disk space. Unsupported replays are skipped.")}</p>}
     {(archive.rejected + archive.unreadable) > 0 && <p className="results-message error" role="alert">{t("Could not load")}{' '}{countLabel(archive.rejected + archive.unreadable, 'saved record')}.</p>}
     <div className="results-toolbar">
-      <select aria-label={t("Battle period")} value={range} onChange={e => changeRange(e.target.value as BattlePeriod)}>
-        <option value="today">{t("Today")}</option><option value="yesterday">{t("Yesterday")}</option><option value="day-before-yesterday">{t("Day before yesterday")}</option>
-        <option value="week" title={t("Monday to today")}>{t("This week")}</option><option value="custom">{t("Custom period")}</option>
-        <option value="session">{t("This session")}</option><option value="all">{t("All saved battles")}</option>
-      </select>
+      <div className="results-period-control">
+        <ControlIcon name="calendar" />
+        <select className="results-period-select" aria-label={t("Battle period")} value={range} onChange={e => changeRange(e.target.value as BattlePeriod)}>
+          <option value="today">{t("Today")}</option><option value="yesterday">{t("Yesterday")}</option><option value="day-before-yesterday">{t("Day before yesterday")}</option>
+          <option value="week" title={t("Monday to today")}>{t("This week")}</option><option value="custom">{t("Custom period")}</option>
+          <option value="session">{t("This session")}</option><option value="all">{t("All saved battles")}</option>
+        </select>
+        <span className="results-period-chevron" aria-hidden="true"><ControlIcon name="chevronDown" /></span>
+      </div>
       {accounts.length > 1 && <select aria-label={t("Game account")} value={account} onChange={e => { onAccountChange(e.target.value); setPagination({ filter: '', page: 0 }); setExpanded(null); }}>{accounts.map(([id, player]) => <option key={id} value={id}>{player}</option>)}</select>}
       <span aria-live="polite" aria-atomic="true">{countLabel(totals.count, 'battle')}</span>
     </div>
