@@ -1,9 +1,10 @@
-## Vector 0.3.7
+## Vector 0.3.8
 
-- Restyled the Results period dropdown to match Vector: condensed typography, a calendar icon, an angular dark surface and a custom arrow.
-- Added a matching dark options menu in supporting browsers, with a red selected-item indicator and a clear keyboard focus outline.
-- Preserved native keyboard navigation, all date presets and custom ranges. No new dependencies or changes to battle statistics or saved history.
-- Checked the dropdown at 4K and smaller desktop sizes, including keyboard selection and custom dates.
+- Made Results, Participants, target tracks and recent session battles more compact, so more rows fit on screen.
+- Reduced row padding and metadata gaps while keeping existing text sizes and automatic 4K scaling.
+- Placed table header icons beside their labels. Battle results and timestamps share a line when space permits, and AI counts sit alongside player kills.
+- Tightened Activity event spacing and empty states. Long names and translated labels can still wrap; expanded details, team colors and reported-loss markings are preserved.
+- No changes to statistics, saved history or update behavior. Includes the styled period dropdown from 0.3.7.
 
 Includes the updater fix from 0.3.6. If you are still on 0.3.5 or earlier and automatic updates fail with a port 8112 error, install this release manually once: choose **Exit Vector** in the tray, close any startup error dialog, replace your existing **Vector.exe** with this download, then launch it. Keep **Vector-data** in place. Closing only the browser does not stop Vector. Do not run copies inside the updates folder.
 

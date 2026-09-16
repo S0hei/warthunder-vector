@@ -51,6 +51,6 @@ test('stat text can wrap within fixed columns without smaller fonts, clipping or
   for (const rule of ['max-width: 100%', 'white-space: normal', 'overflow-wrap: anywhere', 'line-height: 1.35']) assert.ok(textRule.includes(rule));
   assert.doesNotMatch(textRule, /font-size|overflow: hidden|text-overflow/);
   assert.match(css, /\.results-table th:first-child \{ width: 40%; \}/);
-  assert.match(css, /\.results-table thead \.battle-stat-label, \.session-table thead \.battle-stat-label \{[^}]*flex-direction: column/);
+  assert.match(css, /\.results-table thead \.battle-stat-label, \.session-table thead \.battle-stat-label \{[^}]*flex-direction: row; flex-wrap: wrap; justify-content: center/);
   assert.match(css, /\.results-ratios > div \{ min-width: 0;/);
 });

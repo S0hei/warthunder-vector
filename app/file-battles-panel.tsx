@@ -93,10 +93,10 @@ function FileBattleRow({ battle: b, expanded, toggle }: { battle: FileBattle; ex
   const provisionalRewards = !b.rewardsFinal && (b.wp !== null || b.exp !== null);
   return <><tr>
     <th scope="row"><button type="button" className="result-match" aria-expanded={expanded} aria-controls={`battle-${battleKey(b)}`} onClick={toggle}>
-      <span className={`result-outcome ${b.outcome}`}>{t(battleOutcomeText(b))} <time dateTime={b.playedAt}>{new Date(b.playedAt).toLocaleString(locale, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}</time></span>
+      <span className={`result-outcome ${b.outcome}`}><span>{t(battleOutcomeText(b))}</span><time dateTime={b.playedAt}>{new Date(b.playedAt).toLocaleString(locale, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}</time></span>
       <strong>{b.vehicles.length ? <AircraftNames vehicles={b.vehicles} /> : mapName(b.mission, t('Battle'))}</strong>
     </button></th>
-    <td>{number(killCount(b))}{aiCount(b) !== null && <small className="file-battle-ai">+{number(aiCount(b))}{' '}{t("AI")}</small>}</td>
+    <td><span className="result-kills"><span>{number(killCount(b))}</span>{aiCount(b) !== null && <small className="file-battle-ai">+{number(aiCount(b))}{' '}{t("AI")}</small>}</span></td>
     <td>{number(b.deaths)}</td>
     <td>{number(b.spawns)}</td>
   </tr><tr id={`battle-${battleKey(b)}`} hidden={!expanded}><td colSpan={4}><div className="report-details">

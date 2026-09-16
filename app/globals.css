@@ -752,11 +752,11 @@ button:focus-visible { outline: 1px solid var(--signal); outline-offset: 0.125re
 .session-metrics .game-icon[data-game-icon='killDeath'], .results-ratios .game-icon[data-game-icon='killDeath'] { color: #c9aba1; }
 .session-metrics .game-icon[data-game-icon='killSpawn'], .results-ratios .game-icon[data-game-icon='killSpawn'] { color: #a7becf; }
 .session-rewards .game-icon[data-game-icon='silverLions'], .results-rewards .game-icon[data-game-icon='silverLions'] { width: 2em; height: 2em; }
-.activity-table thead .game-label, .results-table thead .game-label { flex-direction: column; gap: .35em; }
+.activity-table thead .game-label, .results-table thead .game-label { flex-direction: row; flex-wrap: wrap; justify-content: center; gap: .35em; }
 /* Keep localized stat headings inside their columns at every text scale. */
 .battle-stat-label { min-width: 0; }
 .battle-stat-label .game-label-text { max-width: 100%; white-space: normal; overflow-wrap: anywhere; line-height: 1.35; }
-.results-table thead .battle-stat-label, .session-table thead .battle-stat-label { display: flex; flex-direction: column; gap: .35em; text-align: center; }
+.results-table thead .battle-stat-label, .session-table thead .battle-stat-label { display: flex; flex-direction: row; flex-wrap: wrap; justify-content: center; gap: .35em; text-align: center; }
 .session-table thead th:has(.battle-stat-label) { text-align: center; white-space: normal; }
 .combat-action .game-icon { width: 1.4em; height: 1.4em; }
 .intel-tabs .game-icon { width: 1.2em; height: 1.2em; }
@@ -951,6 +951,35 @@ button:focus-visible { outline: 1px solid var(--signal); outline-offset: 0.125re
 .tactical-shell :is(button, input, select, [tabindex]):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .tactical-shell .activity-picker-input .activity-search:focus-visible { outline: none; }
 .activity-picker-input:focus-within { outline-color: var(--focus); }
+/* Compact table rhythm: trim space, not reading sizes or full names. */
+.results-table thead th, .enemy-table thead th, .activity-table thead th { padding-top: .4375rem; padding-bottom: .4375rem; }
+.results-table td, .results-table td:last-child { padding-top: .4375rem; padding-bottom: .4375rem; }
+.results-table .result-match { min-height: 2.75rem; padding: .5rem .65rem; }
+.result-match strong { margin-top: .1875rem; }
+.result-outcome { display: flex; flex-wrap: wrap; align-items: baseline; gap: .125rem .5rem; }
+.result-outcome time { display: inline; margin: 0; white-space: nowrap; }
+.result-kills { display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline; gap: .125rem .35rem; }
+.file-battle-ai { display: inline-block; margin: 0; }
+.report-details { padding: .125rem .625rem .375rem; }
+.report-details dl > div { padding-top: .375rem; padding-bottom: .375rem; }
+.enemy-table tbody th, .enemy-table tbody td { padding-top: .375rem; padding-bottom: .375rem; }
+.enemy-damage time { margin-top: .125rem; }
+.activity-table tbody th, .activity-table td { padding-top: .4375rem; padding-bottom: .4375rem; }
+.contact-log th { padding-top: .375rem; padding-bottom: .375rem; }
+.contact-log td { padding-top: .375rem; padding-bottom: .375rem; }
+.contact-log tbody tr[role='button'] { height: 2rem; }
+.contact-log td:first-child small { margin-top: .125rem; }
+.session-table thead th { padding-top: .5rem; padding-bottom: .5rem; }
+.session-table tbody th, .session-table td { padding-top: .625rem; padding-bottom: .625rem; }
+.session-table tbody th > span, .session-table td small { margin-top: .1875rem; }
+.results-table .aircraft-list, .session-table .aircraft-list { gap: .25rem; }
+.results-table .results-empty, .enemy-table .enemy-empty { padding: 1rem .75rem; }
+.activity-table .activity-empty td { height: auto; padding: 1rem .75rem; }
+.contact-log .empty-row td { height: 2.75rem; }
+.combat-event { padding: .5625rem 0; }
+.combat-event header { margin-bottom: .3125rem; gap: .375rem; }
+.combat-vehicle { margin-top: .125rem; }
+.activity-empty-message { padding: 1rem .5rem; }
 /* Keep the native select interaction while matching Vector's angular controls. */
 .results-period-control { position: relative; flex: 1 1 15rem; min-width: 0; max-width: 100%; }
 .results-toolbar .results-period-select { display: block; width: 100%; min-height: 2.75rem; margin: 0; padding: .625rem 3rem .625rem 2.625rem; appearance: none; border: 1px solid var(--line-strong); border-radius: 0; background: var(--panel-raised); color: var(--cream); font: 700 .9375rem/1.3 var(--font-heading); letter-spacing: .025em; text-transform: uppercase; cursor: pointer; }
