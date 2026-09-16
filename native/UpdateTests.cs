@@ -24,7 +24,7 @@ internal static class UpdateTests
     {
         string root = Path.Combine(directory, Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
         stage = Path.Combine(root, "Vector-data", "updates", "stage-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(stage);
-        string target = Path.Combine(root, "Vector with spaces.exe"), candidate = Path.Combine(stage, "Vector.exe");
+        string target = Path.Combine(root, "Vector with spaces тест.exe"), candidate = Path.Combine(stage, "Vector.exe");
         File.WriteAllText(target, "old executable fixture");
         File.Copy(Assembly.GetExecutingAssembly().Location, candidate);
         File.WriteAllText(Path.Combine(root, "Vector-data", "keep-user-data.txt"), "untouched");
@@ -73,6 +73,8 @@ internal static class UpdateTests
         var clock = Stopwatch.StartNew(); string done = Path.Combine(stage, "fixture-done.txt");
         while (!File.Exists(done) && clock.Elapsed < TimeSpan.FromSeconds(15)) Thread.Sleep(100);
         check(File.Exists(done) && File.ReadAllText(done) == "0" && File.Exists(Path.Combine(stage, "previous.exe")), "real update helper replaces and confirms its replacement process");
+        check(File.ReadAllText(Path.Combine(Path.GetDirectoryName(plan.Target), "fixture-server-restarted.txt")) == VectorVersion.Current,
+            "replacement binds the parent's exact port and serves HTTP while the updater helper is still alive");
         foreach (string file in new[] { Path.Combine(stage, "fixture-helper-id.txt"), Path.Combine(Path.GetDirectoryName(plan.Target), "fixture-child-id.txt") })
         {
             try { using (var process = Process.GetProcessById(int.Parse(File.ReadAllText(file)))) check(process.WaitForExit(5000), "update fixture child exits cleanly"); }
@@ -96,6 +98,10 @@ internal static class UpdateTests
     }
     private static void UpdateInterface(Action<bool, string> check, string directory)
     {
+        foreach (string arguments in new[] { "--updated bad", "--updated " + new string('a', 32) + "\n", "--apply-update extra", "--skip-update-once" })
+            Fails(() => UpdateProcess.Start(Assembly.GetExecutingAssembly().Location, arguments), check, "process launcher rejects unsupported update arguments");
+        Fails(() => UpdateProcess.Start("Vector.exe", "--apply-update"), check, "process launcher never searches for a relative executable");
+        Fails(() => UpdateProcess.Start(Path.Combine(directory, "missing.exe"), "--apply-update"), check, "process creation failure is reported without fallback shell execution");
         var prompt = new UpdatePrompt();
         check(!prompt.RequestRestart() && !prompt.TakeRestart(), "no restart before a verified download is ready");
         prompt.Downloaded("9.8.7");
@@ -111,6 +117,8 @@ internal static class UpdateTests
         prompt = new UpdatePrompt();
         using (var server = new LocalServer(new BattleFileStore(Path.Combine(directory, "update-api")), 0, null, null, prompt))
         {
+            Fails(() => { using (var other = new LocalServer(new BattleFileStore(Path.Combine(directory, "port-conflict")), new Uri(server.Origin).Port)) { } },
+                check, "a genuinely occupied port remains exclusive; updater fix does not enable socket sharing");
             int status;
             string html = UpdateRequest(server.Origin + "/", null, null, "GET", out status);
             string token = System.Text.RegularExpressions.Regex.Match(html, "token:'([a-f0-9]{64})'").Groups[1].Value;
@@ -191,7 +199,18 @@ internal static class UpdateTests
     }
     public static int FixtureMain(string[] args)
     {
-        if (args[0] == "--updated") { File.WriteAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "fixture-child-id.txt"), Process.GetCurrentProcess().Id.ToString()); UpdateInstaller.AcknowledgeStartup(args); Thread.Sleep(500); return 0; }
+        if (args[0] == "--updated")
+        {
+            string root = AppDomain.CurrentDomain.BaseDirectory;
+            File.WriteAllText(Path.Combine(root, "fixture-child-id.txt"), Process.GetCurrentProcess().Id.ToString());
+            using (var server = new LocalServer(new BattleFileStore(Path.Combine(root, "fixture-battles")), int.Parse(File.ReadAllText(Path.Combine(root, "fixture-port.txt")))))
+            {
+                int status;
+                if (!UpdateRequest(server.Origin + "/api/version", null, null, "GET", out status).Contains(VectorVersion.Current) || status != 200) return 1;
+                File.WriteAllText(Path.Combine(root, "fixture-server-restarted.txt"), VectorVersion.Current);
+                UpdateInstaller.AcknowledgeStartup(args); Thread.Sleep(500); return 0;
+            }
+        }
         if (args[0] == "--apply-update")
         {
             string folder = AppDomain.CurrentDomain.BaseDirectory; var plan = UpdateInstaller.ReadPlan(folder);
@@ -202,9 +221,15 @@ internal static class UpdateTests
         var setup = new UpdatePlan { Target = target, OldHash = UpdateSource.Hash(target), Sha256 = UpdateSource.Hash(candidate), Size = new FileInfo(candidate).Length, Version = VectorVersion.Current,
             ParentId = Process.GetCurrentProcess().Id, ParentStarted = Process.GetCurrentProcess().StartTime.ToUniversalTime().Ticks, Nonce = Guid.NewGuid().ToString("N") };
         File.WriteAllText(Path.Combine(stage, "plan.json"), new JavaScriptSerializer().Serialize(setup));
-        using (var mutex = new Mutex(true, @"Local\VectorUpdateFixture-" + setup.Nonce))
-        using (var ready = new EventWaitHandle(false, EventResetMode.AutoReset, @"Local\VectorUpdateReady-" + setup.Nonce))
-        using (var helper = Process.Start(new ProcessStartInfo(Path.Combine(stage, "VectorUpdater.exe"), "--apply-update") { UseShellExecute = false, CreateNoWindow = true }))
-        { File.WriteAllText(Path.Combine(stage, "fixture-helper-id.txt"), helper.Id.ToString()); bool ok = ready.WaitOne(5000); mutex.ReleaseMutex(); return ok ? 0 : 1; }
+        using (var server = new LocalServer(new BattleFileStore(Path.Combine(Path.GetDirectoryName(target), "fixture-battles")), 0))
+        {
+            File.WriteAllText(Path.Combine(Path.GetDirectoryName(target), "fixture-port.txt"), new Uri(server.Origin).Port.ToString());
+            int status;
+            if (!UpdateRequest(server.Origin + "/api/version", null, null, "GET", out status).Contains(VectorVersion.Current) || status != 200) return 1;
+            using (var mutex = new Mutex(true, @"Local\VectorUpdateFixture-" + setup.Nonce))
+            using (var ready = new EventWaitHandle(false, EventResetMode.AutoReset, @"Local\VectorUpdateReady-" + setup.Nonce))
+            using (var helper = UpdateProcess.Start(Path.Combine(stage, "VectorUpdater.exe"), "--apply-update"))
+            { File.WriteAllText(Path.Combine(stage, "fixture-helper-id.txt"), helper.Id.ToString()); bool ok = ready.WaitOne(5000); mutex.ReleaseMutex(); return ok ? 0 : 1; }
+        }
     }
 }

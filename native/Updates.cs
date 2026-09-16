@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -166,6 +168,57 @@ namespace VectorPortable
         public ReleaseUpdate Release() { return new ReleaseUpdate { Version = Version, Sha256 = Sha256, Size = Size }; }
     }
 
+    internal static class UpdateProcess
+    {
+        private const int StartfUseShowWindow = 1;
+        private const uint CreateNoWindow = 0x08000000;
+        [StructLayout(LayoutKind.Sequential)]
+        private struct StartupInfo
+        {
+            public int Size;
+            public IntPtr Reserved, Desktop, Title;
+            public int X, Y, XSize, YSize, XCountChars, YCountChars, FillAttribute, Flags;
+            public short ShowWindow, ReservedSize;
+            public IntPtr ReservedBytes, StandardInput, StandardOutput, StandardError;
+        }
+        [StructLayout(LayoutKind.Sequential)]
+        private struct ProcessInformation
+        { public IntPtr Process, Thread; public int ProcessId, ThreadId; }
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true, ExactSpelling = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool CreateProcessW(string application, StringBuilder commandLine, IntPtr processAttributes,
+            IntPtr threadAttributes, [MarshalAs(UnmanagedType.Bool)] bool inheritHandles, uint flags, IntPtr environment,
+            string directory, ref StartupInfo startup, out ProcessInformation information);
+        [DllImport("kernel32.dll", ExactSpelling = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool CloseHandle(IntPtr handle);
+
+        public static Process Start(string executable, string arguments)
+        {
+            if (!Path.IsPathRooted(executable) || Path.GetFullPath(executable) != executable || executable.IndexOf('"') >= 0 ||
+                !(arguments == "--apply-update" || arguments == "--skip-update-once --no-browser" ||
+                  Regex.IsMatch(arguments ?? "", "^--updated [a-f0-9]{32}\\z"))) throw new ArgumentException("Invalid update process.");
+            var startup = new StartupInfo { Size = Marshal.SizeOf(typeof(StartupInfo)), Flags = StartfUseShowWindow, ShowWindow = 0 };
+            ProcessInformation information;
+            // Framework Process.Start can inherit the listening socket into the helper.
+            // That keeps the port bound after the parent exits. Launch without inheriting
+            // ANY handles; our startup handshakes open their named events explicitly.
+            if (!CreateProcessW(executable, new StringBuilder("\"" + executable + "\" " + arguments), IntPtr.Zero, IntPtr.Zero,
+                false, CreateNoWindow, IntPtr.Zero, Path.GetDirectoryName(executable), ref startup, out information))
+                throw new Win32Exception(Marshal.GetLastWin32Error());
+            Process process = null;
+            try
+            {
+                process = Process.GetProcessById(information.ProcessId);
+                // Retain a managed handle before releasing the native creation handles.
+                if (process.Handle == IntPtr.Zero) throw new InvalidOperationException("Update process handle unavailable.");
+                return process;
+            }
+            catch { if (process != null) process.Dispose(); throw; }
+            finally { CloseHandle(information.Thread); CloseHandle(information.Process); }
+        }
+    }
+
     internal static class UpdateInstaller
     {
         public const string MutexName = @"Local\VectorPortableReports-v1";
@@ -251,7 +304,7 @@ namespace VectorPortable
                                 Process child = null; bool healthyChild = false;
                                 try
                                 {
-                                    child = Process.Start(new ProcessStartInfo(target, "--updated " + plan.Nonce) { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = Path.GetDirectoryName(target) });
+                                    child = UpdateProcess.Start(target, "--updated " + plan.Nonce);
                                     healthyChild = WaitForStartup(ready, child);
                                 }
                                 catch { }
@@ -276,7 +329,7 @@ namespace VectorPortable
                         {
                             MarkFailure(stage, plan);
                             if (locked) { mutex.ReleaseMutex(); locked = false; }
-                            Process.Start(new ProcessStartInfo(plan.Target, "--skip-update-once --no-browser") { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = Path.GetDirectoryName(plan.Target) });
+                            using (UpdateProcess.Start(plan.Target, "--skip-update-once --no-browser")) { }
                         }
                         return healthy ? 0 : 1;
                     }
@@ -291,7 +344,7 @@ namespace VectorPortable
                     {
                         MarkFailure(stage, plan);
                         if (parentExited && File.Exists(plan.Target) && UpdateSource.Hash(plan.Target) == plan.OldHash)
-                            Process.Start(new ProcessStartInfo(plan.Target, "--skip-update-once --no-browser") { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = Path.GetDirectoryName(plan.Target) });
+                            using (UpdateProcess.Start(plan.Target, "--skip-update-once --no-browser")) { }
                     }
                     catch { }
                 }
@@ -412,7 +465,7 @@ namespace VectorPortable
                 if (!File.Exists(helper)) File.Copy(executable, helper);
                 if (UpdateSource.Hash(helper) != plan.OldHash) throw new IOException("Update helper changed.");
                 using (var ready = new EventWaitHandle(false, EventResetMode.AutoReset, @"Local\VectorUpdateReady-" + plan.Nonce))
-                using (var process = Process.Start(new ProcessStartInfo(helper, "--apply-update") { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = stage }))
+                using (var process = UpdateProcess.Start(helper, "--apply-update"))
                 {
                     // A helper that sees us stay in battle exits after 30 seconds.
                     nextInstallAttempt = DateTime.UtcNow.AddSeconds(45);

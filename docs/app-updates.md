@@ -36,6 +36,18 @@ initialization within 20 seconds. If startup fails, only that updater-launched
 replacement child may be terminated, the old executable is restored, and that
 release digest is suppressed until a manual retry or a different release.
 
+From 0.3.6, helper, replacement and rollback processes use `CreateProcessW` with
+handle inheritance disabled and no console window. The startup handshakes open
+their named events explicitly. This prevents the .NET Framework launch path from
+passing the loopback listening socket to the helper, which kept port 8112 occupied
+after the parent exited. Exclusive socket binding is retained: no address reuse,
+new port, firewall change or termination of an unrelated port owner is needed.
+See [Microsoft's handle inheritance documentation](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createprocessw).
+The Windows regression fixture starts a real loopback server in the parent and
+requires its replacement to bind the same port and serve HTTP before acknowledging
+startup while the helper is alive. It uses temporary files, an ephemeral port and
+a separate mutex, never the user's collector, game, browser or running Vector.
+
 The existing browser tab checks the local app instance and update state every
 three seconds and reloads after a restart, refreshing its per-launch access token.
 Older native versions retain the 15-second instance check. It does not
@@ -55,9 +67,11 @@ POST queues a single handoff and returns before the native app exits. Duplicate
 requests from multiple tabs are rejected. No executable paths or release URLs
 are accepted from the browser or exposed in the update status.
 
-This interface is included from 0.3.4. If an older updater cannot install that
-version, replace Vector.exe manually once with Vector fully closed, preserving
-Vector-data. A popup does not bypass checksum verification or startup rollback.
+The interface is included from 0.3.4; the inherited-socket fix is in 0.3.6.
+An older updater cannot reliably install this fix because its own helper retains
+the bug. Exit Vector from its tray, close startup error dialogs, and replace the
+main Vector.exe manually once, preserving Vector-data. Do not launch executables
+from the staging folders. A popup does not bypass checksum verification or rollback.
 
 ## Publishing
 

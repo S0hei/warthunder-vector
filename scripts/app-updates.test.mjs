@@ -35,6 +35,15 @@ test('update payloads reject untrusted versions and states and discard unrelated
   for (const value of [null, {}, 'ready', { ...ready, version: null }, { ...ready, version: '<script>' }, { ...ready, version: '1'.repeat(100) }, { ...ready, state: 'install-anything' }, { ...ready, error: 'raw exception' }]) assert.equal(parseUpdateStatus(value), null);
 });
 
+test('every native update launch disables handle inheritance without weakening exclusive binding', () => {
+  const source = read('native/Updates.cs');
+  assert.doesNotMatch(source, /\bProcess\.Start\s*\(/);
+  assert.equal((source.match(/UpdateProcess\.Start\(/g) ?? []).length, 4);
+  assert.match(source, /false, CreateNoWindow, IntPtr.Zero, Path.GetDirectoryName\(executable\)/);
+  assert.match(read('native/Vector.cs'), /listener.Server.ExclusiveAddressUse = true/);
+  assert.match(read('native/UpdateTests.cs'), /replacement binds the parent's exact port and serves HTTP while the updater helper is still alive/);
+});
+
 test('the popup renders localized ready, restart, unsafe-battle and rollback states', () => {
   const language = componentLoader()('lib/language.ts');
   for (const locale of ['en', 'ru']) {

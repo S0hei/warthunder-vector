@@ -1,12 +1,14 @@
-## Vector 0.3.5
+## Vector 0.3.6
 
-- Refined the 4K layout with a wider, proportional sidebar, more balanced headings and consistent spacing across Contacts, Activity and Results.
-- Simplified the map header: connection status sits beside the battle title, with compact allied/enemy counters and an unobtrusive unavailable clock.
-- Grouped zoom, map-fit controls, layer filters and scale along the bottom of the map. Controls wrap cleanly in smaller windows.
-- Small windows place the information panel below the map instead of covering it.
-- Empty Results cards are quieter, without redundant zero-battle confirmation notes. Real zero values, missing data and partial-result coverage remain distinct.
-- Removed the technical footer labels **WT: 8111** and **Local / Read-only**. The GitHub download link remains available.
-- Localized the mission's running status in Russian. Battle statistics, map markers and saved history are unchanged.
+**If an older version fails during automatic updates, install this release manually once:** choose **Exit Vector** in the tray, close any startup error dialog, replace your existing **Vector.exe** with this download, then launch it. Keep **Vector-data** in place. Closing only the browser does not stop Vector. Do not run the copies inside the updates folder.
+
+- Fixed updates failing with "Only one usage of each socket address..." on port 8112, then rolling back to the old version.
+- The updater helper was inheriting the app's listening socket and keeping the port occupied after the main app exited. Helper, replacement and rollback processes now launch without inherited handles.
+- Added an end-to-end Windows regression test that serves HTTP, exits the original process, then starts the replacement on the exact same port while the helper is still alive.
+- The port remains exclusive. Checksum verification, explicit restart approval, battle-state checks and rollback protections are unchanged.
+- Includes the 4K layout improvements from 0.3.5. Battle statistics and saved history are unchanged.
+
+The faulty updater is part of the older executable, so downloading 0.3.6 through that updater cannot reliably repair it. The one-time manual replacement installs the corrected updater for future releases.
 
 Vector checks for updates at launch and every hour. Installation waits for your **Restart Vector** click and a safe game state; saved history stays in **Vector-data**.
 
