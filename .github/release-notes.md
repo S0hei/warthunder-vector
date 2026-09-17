@@ -1,10 +1,10 @@
-## Vector 0.3.8
+## Vector 0.3.9
 
-- Made Results, Participants, target tracks and recent session battles more compact, so more rows fit on screen.
-- Reduced row padding and metadata gaps while keeping existing text sizes and automatic 4K scaling.
-- Placed table header icons beside their labels. Battle results and timestamps share a line when space permits, and AI counts sit alongside player kills.
-- Tightened Activity event spacing and empty states. Long names and translated labels can still wrap; expanded details, team colors and reported-loss markings are preserved.
-- No changes to statistics, saved history or update behavior. Includes the styled period dropdown from 0.3.7.
+- Added support for War Thunder replay format 101404 while retaining format 101387 support and strict result validation.
+- Fixed unsupported or incomplete replays incorrectly causing the persistent "Some files unavailable" warning. These now have a separate, neutral notice; genuine file-access and save failures remain visible.
+- Replays without a multiplayer battle ID no longer cause errors or enter session statistics.
+- Stable unsupported files are cached instead of being reparsed every five seconds. Changed or completed files are retried automatically, as are failed archive saves.
+- Verified the collector against actual game files using an isolated test archive. Existing history, reward safeguards and the compact table layout are preserved.
 
 Includes the updater fix from 0.3.6. If you are still on 0.3.5 or earlier and automatic updates fail with a port 8112 error, install this release manually once: choose **Exit Vector** in the tray, close any startup error dialog, replace your existing **Vector.exe** with this download, then launch it. Keep **Vector-data** in place. Closing only the browser does not stop Vector. Do not run copies inside the updates folder.
 

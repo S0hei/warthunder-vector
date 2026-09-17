@@ -6,7 +6,7 @@ import type { FileBattle } from './lib/file-battles';
 import { vectorEndpoint } from './lib/vector-bridge';
 
 export type FileArchive = { connection: 'connecting' | 'connected' | 'offline' | 'standalone'; status: string; paused: boolean;
-  startedAt: string | null; unreadable: number; rejected: number; battles: FileBattle[] };
+  startedAt: string | null; unreadable: number; rejected: number; skippedReplays?: number; battles: FileBattle[] };
 
 export function useFileArchive() {
   const [archive, setArchive] = useState<FileArchive>({ connection: 'connecting', status: 'searching', paused: false, startedAt: null, unreadable: 0, rejected: 0, battles: [] });
@@ -30,7 +30,9 @@ export function useFileArchive() {
         if (p.schemaVersion !== 1 || typeof p.status !== 'string' || typeof p.paused !== 'boolean' ||
           typeof p.startedAt !== 'string' || !Number.isFinite(Date.parse(p.startedAt)) || typeof p.unreadable !== 'number' || !Number.isSafeInteger(p.unreadable) || p.unreadable < 0) throw new Error('Invalid collector response');
         const decoded = decodeFileBattles(p.battles);
-        if (!stopped) { etag = response.headers.get('ETag') ?? ''; setArchive({ connection: 'connected', status: p.status, paused: p.paused, startedAt: p.startedAt, unreadable: p.unreadable, ...decoded }); }
+        const skippedReplays = p.skippedReplays === undefined ? 0 : p.skippedReplays;
+        if (typeof skippedReplays !== 'number' || !Number.isSafeInteger(skippedReplays) || skippedReplays < 0 || skippedReplays > 200) throw new Error('Invalid collector response');
+        if (!stopped) { etag = response.headers.get('ETag') ?? ''; setArchive({ connection: 'connected', status: p.status, paused: p.paused, startedAt: p.startedAt, unreadable: p.unreadable, skippedReplays, ...decoded }); }
       } catch { if (!stopped) setArchive(old => ({ ...old, connection: 'offline' })); }
       finally { clearTimeout(timeout); if (!stopped) timer = setTimeout(poll, 3000); }
     };

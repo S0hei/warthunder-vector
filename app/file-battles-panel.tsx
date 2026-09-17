@@ -12,6 +12,7 @@ import { GameLabel } from './game-icon';
 import { mapName } from './lib/map-names';
 import { battleOutcomeText } from './lib/ui-text';
 import ControlIcon from './control-icon';
+import ReplayImportNotice from './replay-import-notice';
 
 export default function FileBattlesPanel({ archive, account, accounts, onAccountChange }: { archive: FileArchive; account: string | undefined; accounts: [string, string][]; onAccountChange: (id: string) => void }) {
   const { t, number, countLabel, notAvailable } = useTranslation();
@@ -41,6 +42,7 @@ export default function FileBattlesPanel({ archive, account, accounts, onAccount
     {archive.status === 'game-not-found' && <p className="results-message" role="status">{t("Choose the War Thunder folder from Vector’s tray menu.")}</p>}
     {archive.status === 'read-error' && <p className="results-message error" role="status">{t("Some game files could not be read or saved. Check folder access and free disk space. Unsupported replays are skipped.")}</p>}
     {(archive.rejected + archive.unreadable) > 0 && <p className="results-message error" role="alert">{t("Could not load")}{' '}{countLabel(archive.rejected + archive.unreadable, 'saved record')}.</p>}
+    <ReplayImportNotice count={archive.skippedReplays} />
     <div className="results-toolbar">
       <div className="results-period-control">
         <ControlIcon name="calendar" />

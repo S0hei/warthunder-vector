@@ -150,6 +150,7 @@
   "Showing the last known positions.": "Показаны последние известные позиции.",
   "Since": "С",
   "Some game files could not be read or saved. Check folder access and free disk space. Unsupported replays are skipped.": "Не удалось прочитать или сохранить часть файлов игры. Проверьте доступ к папке и свободное место. Повторы неподдерживаемого формата пропускаются.",
+  "Replay results unavailable: {count}. Unsupported or incomplete files were skipped.": "Результаты повторов недоступны: {count}. Пропущены файлы неподдерживаемого формата или с неполными данными.",
   "Sources": "Источники",
   "Spawns": "Спавны",
   "Start date": "Начало периода",

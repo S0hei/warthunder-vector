@@ -45,7 +45,7 @@ namespace VectorPortable
         private readonly JavaScriptSerializer json = new JavaScriptSerializer { MaxJsonLength = 33554432 };
         private readonly string startedAt = DateTimeOffset.UtcNow.ToString("o");
         private string status = "searching", scannedAt;
-        private int unreadable;
+        private int unreadable, skippedReplays;
         private bool paused;
 
         public static bool Valid(FileBattle b)
@@ -133,7 +133,7 @@ namespace VectorPortable
             }
         }
 
-        public void SetStatus(string value) { lock (gate) { status = value; scannedAt = DateTimeOffset.UtcNow.ToString("o"); } }
+        public void SetStatus(string value, int skipped = 0) { lock (gate) { status = value; skippedReplays = skipped; scannedAt = DateTimeOffset.UtcNow.ToString("o"); } }
         public void SetPaused(bool value) { lock (gate) paused = value; }
         internal bool NeedsSpawnEvidence(DateTimeOffset from, DateTimeOffset to)
         {
@@ -146,7 +146,7 @@ namespace VectorPortable
         }
         public string Snapshot()
         {
-            lock (gate) return json.Serialize(new { schemaVersion = 1, startedAt, status, scannedAt, paused, unreadable,
+            lock (gate) return json.Serialize(new { schemaVersion = 1, startedAt, status, scannedAt, paused, unreadable, skippedReplays,
                 battles = records.Values.OrderByDescending(b => b.playedAt).Take(5000).ToArray() });
         }
     }
@@ -410,7 +410,12 @@ namespace VectorPortable
         {
             var reader = new BinaryReader(stream);
             byte[] header = Bytes(reader, 920, 920);
-            if (BitConverter.ToUInt32(header, 0) != 0x1000ace5 || BitConverter.ToUInt32(header, 4) != 101387) throw new InvalidDataException("Unsupported replay version");
+            uint version = BitConverter.ToUInt32(header, 4);
+            // Both versions use the same validated header fields and standalone-BLK trailer.
+            if (BitConverter.ToUInt32(header, 0) != 0x1000ace5 || (version != 101387 && version != 101404)) throw new InvalidDataException("Unsupported replay version");
+            // Local/non-match replays cannot be associated with a multiplayer result.
+            // Never invent a battle identity or import these into session statistics.
+            if (BitConverter.ToUInt64(header, 732) == 0) return null;
             long offset = BitConverter.ToUInt32(header, 684);
             if (offset < 920 || offset >= stream.Length || stream.Length - offset > 8388608) throw new InvalidDataException();
             stream.Position = offset;
@@ -455,8 +460,9 @@ namespace VectorPortable
                 if (used != paramCount || input.BaseStream.Position != tail.Length || blocks[0].name != "root") throw new InvalidDataException();
             }
             Block root = blocks[0]; string account = StringValue(root, "authorUserId");
-            Block own = blocks.SingleOrDefault(b => b.name == "player" && StringValue(b, "userId") == account);
-            if (own == null) throw new InvalidDataException("No author scoreboard");
+            Block[] authors = blocks.Where(b => b.name == "player" && StringValue(b, "userId") == account).ToArray();
+            if (authors.Length != 1) throw new InvalidDataException("Missing or ambiguous author scoreboard");
+            Block own = authors[0];
             string status = StringValue(root, "status"); object duration;
             string level = Text(header, 8, 127).Replace("levels/", "").Replace(".bin", "");
             var result = new FileBattle {
@@ -477,7 +483,8 @@ namespace VectorPortable
         private readonly BattleFileStore store;
         private readonly string settings;
         private readonly Dictionary<string, BattleLogReader> logs = new Dictionary<string, BattleLogReader>();
-        private readonly Dictionary<string, string> replays = new Dictionary<string, string>();
+        private sealed class ReplayScan { public string Signature; public bool Skipped; }
+        private readonly Dictionary<string, ReplayScan> replays = new Dictionary<string, ReplayScan>();
         private readonly object gate = new object();
         private readonly Timer timer;
         private readonly CombatTeamFeed teams;
@@ -522,12 +529,14 @@ namespace VectorPortable
         }
 
         public GameFileCollector(BattleFileStore store, string dataDirectory, CombatTeamFeed teams = null)
+            : this(store, dataDirectory, teams, true) { }
+        internal GameFileCollector(BattleFileStore store, string dataDirectory, CombatTeamFeed teams, bool startTimer)
         {
             this.teams = teams;
             this.store = store; settings = Path.Combine(dataDirectory, "game-folder.txt");
             try { if (File.Exists(settings) && new FileInfo(settings).Length < 4096) { string chosen = File.ReadAllText(settings).Trim(); if (IsGameFolder(chosen)) root = chosen; } } catch { }
             if (root == null) root = Discover();
-            timer = new Timer(_ => Scan(), null, 0, 5000);
+            timer = new Timer(_ => Scan(), null, startTimer ? 0 : Timeout.Infinite, 5000);
         }
         public void Choose(string path)
         {
@@ -541,7 +550,18 @@ namespace VectorPortable
             foreach (string key in cache.Keys.Where(key => !retained.Contains(key)).ToArray()) cache.Remove(key);
         }
         private static bool Regular(string path) { return (File.GetAttributes(path) & FileAttributes.ReparsePoint) == 0; }
-        private void Scan()
+        internal static bool ImportReplay(Stream input, Action<FileBattle> save)
+        {
+            FileBattle battle;
+            try { battle = ReplayMetadata.Read(input); }
+            catch (InvalidDataException) { return false; }
+            catch (EndOfStreamException) { return false; }
+            // Deliberately outside the parser catch: archive/save failures must stay errors
+            // and be retried, even if a save callback throws InvalidDataException.
+            if (battle != null) save(battle);
+            return true;
+        }
+        internal void Scan()
         {
             if (stopped || paused || Interlocked.Exchange(ref busy, 1) != 0) return;
             try
@@ -559,12 +579,17 @@ namespace VectorPortable
                         try
                         {
                             if (!Regular(file)) continue;
-                            var info = new FileInfo(file); string signature = info.Length + ":" + info.LastWriteTimeUtc.Ticks, previous;
-                            if (replays.TryGetValue(file, out previous) && previous == signature) continue;
+                            var info = new FileInfo(file); string signature = info.Length + ":" + info.LastWriteTimeUtc.Ticks;
+                            ReplayScan previous;
+                            if (replays.TryGetValue(file, out previous) && previous.Signature == signature) continue;
+                            replays.Remove(file);
                             // A quiet period avoids parsing the trailer halfway through a game write.
                             if ((DateTime.UtcNow - info.LastWriteTimeUtc).TotalSeconds < 2) { behind = true; continue; }
-                            using (var input = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete)) store.Upsert(ReplayMetadata.Read(input));
-                            replays[file] = signature;
+                            bool imported;
+                            using (var input = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete)) imported = ImportReplay(input, store.Upsert);
+                            // Cache only successful reads, including stable unsupported/partial
+                            // files. A changed length or timestamp always retries the replay.
+                            replays[file] = new ReplayScan { Signature = signature, Skipped = !imported };
                         }
                         catch { errors = true; }
                     }
@@ -599,7 +624,7 @@ namespace VectorPortable
                         }
                         catch { errors = true; }
                     }
-                    store.SetStatus(errors ? "read-error" : behind ? "indexing" : "ready");
+                    store.SetStatus(errors ? "read-error" : behind ? "indexing" : "ready", replays.Values.Count(x => x.Skipped));
                 }
             }
             catch { store.SetStatus("read-error"); }

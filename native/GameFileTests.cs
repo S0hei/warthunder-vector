@@ -9,7 +9,7 @@ using VectorPortable;
 internal static class GameFileTests
 {
     private static void Uleb(BinaryWriter w, int n) { do { byte b = (byte)(n & 127); n >>= 7; w.Write((byte)(b | (n > 0 ? 128 : 0))); } while (n > 0); }
-    private static byte[] Replay(bool final)
+    private static byte[] Replay(bool final, uint version = 101387u, ulong battleId = 0x123456789abcdefUL)
     {
         var root = new Dictionary<string, object> { { "authorUserId", "42" }, { "author", "Test pilot" }, { "timePlayed", 120f } };
         if (final) root.Add("status", "success");
@@ -31,9 +31,9 @@ internal static class GameFileTests
                 else { fw.Write((byte)2); fw.Write((int)p.Value); }
             }
             byte[] header = new byte[1360];
-            Array.Copy(BitConverter.GetBytes(0x1000ace5u), 0, header, 0, 4); Array.Copy(BitConverter.GetBytes(101387u), 0, header, 4, 4);
+            Array.Copy(BitConverter.GetBytes(0x1000ace5u), 0, header, 0, 4); Array.Copy(BitConverter.GetBytes(version), 0, header, 4, 4);
             Array.Copy(Encoding.UTF8.GetBytes("levels/test.bin\0"), 0, header, 8, 16);
-            Array.Copy(BitConverter.GetBytes(1360u), 0, header, 684, 4); Array.Copy(BitConverter.GetBytes(0x123456789abcdefUL), 0, header, 732, 8);
+            Array.Copy(BitConverter.GetBytes(1360u), 0, header, 684, 4); Array.Copy(BitConverter.GetBytes(battleId), 0, header, 732, 8);
             Array.Copy(BitConverter.GetBytes(1788858000u), 0, header, 908, 4);
             w.Write(header); w.Write((byte)1); Uleb(w, names.Count); Uleb(w, nameBytes.Length); w.Write(nameBytes);
             Uleb(w, 2); Uleb(w, root.Count + own.Count); Uleb(w, (int)data.Length); w.Write(data.ToArray()); w.Write(fields.ToArray());
@@ -97,6 +97,56 @@ internal static class GameFileTests
         Fails(() => reopened.Upsert(final), check, "corrupt existing battle is preserved");
         SpawnTests(check, directory);
         TeamTests(check);
+        ReplayCollectorTests(check, directory);
+    }
+
+    private static void ReplayCollectorTests(Action<bool, string> check, string directory)
+    {
+        var serializer = new JavaScriptSerializer();
+        var old = ReplayMetadata.Read(new MemoryStream(Replay(true)));
+        var current = ReplayMetadata.Read(new MemoryStream(Replay(true, 101404)));
+        check(serializer.Serialize(old) == serializer.Serialize(current), "new replay version 101404 preserves all validated result fields");
+        check(ReplayMetadata.Read(new MemoryStream(Replay(false, 101404))).outcome == "unknown", "new departure replays still cannot imply final results");
+        foreach (uint version in new uint[] { 101387, 101404 })
+            check(ReplayMetadata.Read(new MemoryStream(Replay(true, version, 0))) == null, "known replay without a battle ID is excluded from multiplayer statistics");
+        bool saved = false;
+        check(!GameFileCollector.ImportReplay(new MemoryStream(Replay(true, 999999)), b => saved = true) && !saved, "unsupported replay is skipped without saving or reporting an access error");
+        check(!GameFileCollector.ImportReplay(new MemoryStream(new byte[80]), b => saved = true) && !saved, "unfinished replay is skipped without saving or reporting an access error");
+        check(GameFileCollector.ImportReplay(new MemoryStream(Replay(true, 101404, 0)), b => saved = true) && !saved, "non-match replay needs neither an archive record nor an unsupported warning");
+        Fails(() => GameFileCollector.ImportReplay(new MemoryStream(Replay(true)), b => { throw new IOException("test write failure"); }), check, "archive I/O failures are not swallowed as unsupported replays");
+        Fails(() => GameFileCollector.ImportReplay(new MemoryStream(Replay(true)), b => { throw new InvalidDataException("test save validation failure"); }), check, "save validation failures are not swallowed by the replay parser catch");
+
+        string data = Path.Combine(directory, "replay-collector"), game = Path.Combine(data, "game"), replayDir = Path.Combine(game, "Replays");
+        Directory.CreateDirectory(Path.Combine(game, ".game_logs")); Directory.CreateDirectory(replayDir); Directory.CreateDirectory(Path.Combine(game, "win64"));
+        File.WriteAllBytes(Path.Combine(game, "win64", "aces.exe"), new byte[0]);
+        var store = new BattleFileStore(Path.Combine(data, "battles"));
+        Func<Dictionary<string, object>> state = () => serializer.Deserialize<Dictionary<string, object>>(store.Snapshot());
+        Action<string, byte[]> write = (name, bytes) => { string path = Path.Combine(replayDir, name); File.WriteAllBytes(path, bytes); File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddSeconds(-10)); };
+        write("future.wrpl", Replay(true, 999999)); write("partial.wrpl", new byte[80]); write("local.wrpl", Replay(true, 101404, 0)); write("match.wrpl", Replay(true, 101404));
+        using (var collector = new GameFileCollector(store, data, null, false))
+        {
+            collector.Choose(game); collector.Scan();
+            check((string)state()["status"] == "ready" && (int)state()["skippedReplays"] == 2 && Directory.GetFiles(Path.Combine(data, "battles"), "*.json").Length == 1, "mixed replay formats do not poison collector health or create local-match results");
+            collector.Scan();
+            check((int)state()["skippedReplays"] == 2, "cached unsupported counts survive unchanged rescans");
+            write("partial.wrpl", Replay(true, 101404, 0xabcdef12UL)); collector.Scan();
+            check((int)state()["skippedReplays"] == 1 && Directory.GetFiles(Path.Combine(data, "battles"), "*.json").Length == 2, "a completed replay retries after its signature changes and clears its warning");
+            File.Delete(Path.Combine(replayDir, "future.wrpl")); collector.Scan();
+            check((int)state()["skippedReplays"] == 0, "removed unsupported files leave the bounded cache and clear the warning");
+            string blocked = Path.Combine(data, "battles", "42-fedcba98.json"); Directory.CreateDirectory(blocked);
+            write("save-failure.wrpl", Replay(true, 101404, 0xfedcba98UL)); collector.Scan();
+            check((string)state()["status"] == "read-error" && (int)state()["skippedReplays"] == 0, "a real archive save failure still reports read-error");
+            Directory.Delete(blocked); collector.Scan();
+            check((string)state()["status"] == "ready" && File.Exists(blocked), "failed archive saves are retried without a source-file change");
+            write("locked.wrpl", Replay(true, 101404, 0xeeeeeeeeUL));
+            using (var held = new FileStream(Path.Combine(replayDir, "locked.wrpl"), FileMode.Open, FileAccess.Read, FileShare.None))
+            {
+                collector.Scan();
+                check((string)state()["status"] == "read-error", "real file-sharing violations remain visible");
+            }
+            File.SetLastWriteTimeUtc(Path.Combine(replayDir, "locked.wrpl"), DateTime.UtcNow.AddSeconds(-10)); collector.Scan();
+            check((string)state()["status"] == "ready", "collector recovers after a locked replay is released");
+        }
     }
 
     private static string Player(string name, int team, bool own, int unit)
@@ -288,6 +338,7 @@ internal static class GameFileIntegrationProbe
                     {
                         var records = Directory.GetFiles(Path.Combine(directory, "battles"), "*.json").Select(p => serializer.Deserialize<FileBattle>(File.ReadAllText(p))).ToArray();
                         Console.WriteLine("Imported " + records.Length + " unique account/match records into an isolated archive.");
+                        Console.WriteLine("Collector ready; unsupported or incomplete replays skipped: " + state["skippedReplays"] + ".");
                         if (records.Any(b => !BattleFileStore.Valid(b))) throw new Exception("Invalid imported battle");
                         var annotations = serializer.Deserialize<Dictionary<string, object>>(teams.Snapshot());
                         var teamEvents = ((System.Collections.IEnumerable)annotations["events"]).Cast<Dictionary<string, object>>().ToArray();

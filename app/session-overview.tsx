@@ -11,6 +11,7 @@ import BattleStatLabel from './battle-stat-label';
 import { GameLabel } from './game-icon';
 import { mapName } from './lib/map-names';
 import { battleOutcomeText } from './lib/ui-text';
+import ReplayImportNotice from './replay-import-notice';
 
 export default function SessionOverview({ archive, account, accounts, onAccountChange, onHistory, telemetryOnline }: {
   archive: FileArchive; account: string | undefined; accounts: [string, string][];
@@ -41,6 +42,7 @@ export default function SessionOverview({ archive, account, accounts, onAccountC
     </div>
     {status && <p className="session-status" role="status">{t(status)}{archive.connection === 'standalone' ? t(". Open Vector.exe to load your results.") : ''}</p>}
     {archive.unreadable + archive.rejected > 0 && <p className="session-status error" role="alert">{t("Could not load")}{' '}{countLabel(archive.unreadable + archive.rejected, 'saved record')}.</p>}
+    <ReplayImportNotice count={archive.skippedReplays} />
 
     <dl className="session-metrics">
       <div className="session-win"><dt><GameLabel icon="victories">{t("Win rate")}</GameLabel></dt><dd>{totals.winRate === null ? notAvailable : `${number(totals.winRate, 1)}%`}</dd>
